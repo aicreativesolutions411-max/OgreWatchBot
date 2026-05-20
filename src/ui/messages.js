@@ -18,6 +18,11 @@ export function helpMessage(config) {
     '/watchtoken CA - Watch a token',
     '/watchwallet walletaddress - Watch a wallet',
     '/new - View new Solana pairs',
+    '/newpairs - View new Solana pairs',
+    '/untrack CA_OR_TICKER_OR_WALLET - Remove a watch',
+    '/untrackcoin CA_OR_TICKER - Remove a watched coin',
+    '/untracktoken CA_OR_TICKER - Remove a watched token',
+    '/untrackwallet walletaddress - Remove a watched wallet',
     '/trending - View market movement',
     '/portfolio walletaddress - Check wallet summary',
     '/myalerts - Manage DM alerts',
@@ -89,6 +94,40 @@ export function walletWatchedMessage(wallet, mode, config = {}) {
     `Mode: <b>${escapeHtml(label)}</b>`,
     '',
     'Large trades, first buys, repeated buys, and multi-wallet activity are treated as important.'
+  ].join('\n');
+}
+
+export function untrackTokenMessage({ ca, symbol = '', removedFrom = [], config = {} }) {
+  return [
+    '<b>Coin Untracked</b>',
+    '',
+    `Coin: ${symbol ? tokenLink(symbol, ca, config) : tokenAddressLink(ca, config)}`,
+    `Removed from: <b>${escapeHtml(removedFrom.join(', '))}</b>`
+  ].join('\n');
+}
+
+export function untrackWalletMessage({ wallet, label = 'Watched Wallet', removedFrom = [], config = {} }) {
+  return [
+    '<b>Wallet Untracked</b>',
+    '',
+    `Wallet: ${walletLink(label, wallet, config)} - ${walletAddressLink(wallet, config, 6, 6)}`,
+    `Removed from: <b>${escapeHtml(removedFrom.join(', '))}</b>`
+  ].join('\n');
+}
+
+export function untrackNotFoundMessage(query, kind = 'watch') {
+  return [
+    '<b>Nothing Untracked</b>',
+    '',
+    `I could not find <code>${escapeHtml(query)}</code> in this ${escapeHtml(kind)} list.`
+  ].join('\n');
+}
+
+export function untrackAdminRequiredMessage(query) {
+  return [
+    '<b>Admin Needed</b>',
+    '',
+    `This group is tracking <code>${escapeHtml(query)}</code>, but only group admins can remove group-tracked coins or wallets.`
   ].join('\n');
 }
 

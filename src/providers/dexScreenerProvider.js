@@ -168,11 +168,11 @@ export class DexScreenerProvider {
 
   async scanToken(ca) {
     await this.#refreshTokenIfNeeded(ca);
-    const pair = this.pairsByToken.get(ca);
+    const pair = this.pairsByToken.get(ca) ?? this.pairsByAddress.get(ca);
     if (!pair) return this.fallbackProvider.scanToken(ca);
 
     return {
-      ca,
+      ca: pair.baseTokenAddress || ca,
       symbol: pair.symbol,
       marketCapUsd: pair.marketCapUsd,
       liquidityUsd: pair.liquidityUsd,
@@ -217,7 +217,7 @@ export class DexScreenerProvider {
 
     const pairs = [...this.pairsByAddress.values()];
     const sorted = sortPairsForTrend(pairs, kind).slice(0, 10).map((pair) => ({
-      ca: pair.baseTokenAddress,
+      ca: pair.baseTokenAddress || pair.pairAddress,
       symbol: pair.symbol,
       movePercent: trendPercent(pair, kind),
       reason: trendReason(pair, kind)
@@ -319,7 +319,7 @@ function normalizePair(pair) {
 
 function pairToNewPair(pair) {
   return {
-    ca: pair.baseTokenAddress,
+    ca: pair.baseTokenAddress || pair.pairAddress,
     symbol: pair.symbol,
     ageMinutes: pair.ageMinutes,
     marketCapUsd: pair.marketCapUsd,

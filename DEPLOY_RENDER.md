@@ -87,6 +87,11 @@ Public user commands are registered for everyone:
 /watchtoken
 /watchwallet
 /new
+/newpairs
+/untrack
+/untrackcoin
+/untracktoken
+/untrackwallet
 /trending
 /portfolio
 /myalerts
@@ -124,24 +129,20 @@ The bot listens for normal messages, edited messages, channel posts, and edited 
 
 ```text
 /ping
-ping
 /backup
-backup
-back up
-backup now
 ```
 
-Telegram privacy mode can still hide loose text from bots in groups. If you want the bot to read plain `backup` messages and auto-scan contract addresses, disable Group Privacy in BotFather:
+Telegram privacy mode can still hide loose text from bots in groups. Slash commands should still reach the bot, but pasted contract auto-scan needs Group Privacy disabled in BotFather:
 
 ```text
 BotFather -> your bot -> Bot Settings -> Group Privacy -> Turn off
 ```
 
-Slash commands like `/backup` are the most reliable option when privacy mode is on.
+Slash commands like `/backup` are the reliable option when privacy mode is on.
 
-The bot registers commands on startup and again when it receives Telegram's bot membership update after being added or promoted. Telegram command menu scopes work for private chats, groups, supergroups, chat administrators, and channel chat scopes when Telegram accepts them. Private channels can run `/backup` or plain `backup`. Public chats cannot create backups.
+The bot registers commands on startup and again when it receives Telegram's bot membership update after being added or promoted. Telegram command menu scopes work for private chats, groups, supergroups, chat administrators, and channel chat scopes when Telegram accepts them. Private channels can run `/backup`. Public chats cannot create backups.
 
-For channels, the bot must be an admin with permission to post messages. Test with `/ping` or plain `ping` as a new channel post. If Render logs show `[message] channel:...` but the channel gets no reply, the bot can read the post but cannot post back. If no `[message] channel:...` log appears, remove and re-add the bot as channel admin, then run `/commands` or `commands`.
+For channels, the bot must be an admin with permission to post messages. Test with `/ping` as a new channel post. If Render logs show `[message] channel:...` but the channel gets no reply, the bot can read the post but cannot post back. If no `[message] channel:...` log appears, remove and re-add the bot as channel admin, then run `/commands`.
 
 For DMs and groups, test with `/ping` first. Render logs should show `[message] private:... "/ping"` or `[message] group:... "/ping"`. If DMs do not show up in logs, check that `TELEGRAM_BOT_TOKEN` is the exact token for the bot you are messaging and that no other local/Render copy is running the same token. Telegram will usually log a polling conflict when two copies are running.
 

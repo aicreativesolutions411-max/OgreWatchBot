@@ -25,6 +25,10 @@ import {
   scanMessage,
   tokenWatchedMessage,
   trendingMessage,
+  untrackAdminRequiredMessage,
+  untrackNotFoundMessage,
+  untrackTokenMessage,
+  untrackWalletMessage,
   usageMessage,
   walletWatchedMessage,
   watchlistMessage
@@ -36,6 +40,11 @@ const PUBLIC_COMMANDS = [
   { command: 'watchtoken', description: 'Watch a token' },
   { command: 'watchwallet', description: 'Watch a wallet' },
   { command: 'new', description: 'View new pairs' },
+  { command: 'newpairs', description: 'View new pairs' },
+  { command: 'untrack', description: 'Untrack token or wallet' },
+  { command: 'untrackcoin', description: 'Untrack a coin' },
+  { command: 'untracktoken', description: 'Untrack a token' },
+  { command: 'untrackwallet', description: 'Untrack a wallet' },
   { command: 'trending', description: 'View trending tokens' },
   { command: 'portfolio', description: 'Check wallet summary' },
   { command: 'myalerts', description: 'Manage alerts' },
@@ -241,7 +250,18 @@ export class RadarBot {
         await this.commandWatchWallet(message, args);
         break;
       case '/new':
+      case '/newpairs':
         await this.commandNewPairs(message.chat.id);
+        break;
+      case '/untrack':
+        await this.commandUntrack(message, args, 'any');
+        break;
+      case '/untrackcoin':
+      case '/untracktoken':
+        await this.commandUntrack(message, args, 'token');
+        break;
+      case '/untrackwallet':
+        await this.commandUntrack(message, args, 'wallet');
         break;
       case '/trending':
         await this.commandTrending(message.chat.id, '5m');
@@ -359,6 +379,196 @@ export class RadarBot {
     }
 
     await this.telegram.sendMessage(message.chat.id, askWalletOptionsMessage(wallet, this.config), walletOptionsKeyboard(wallet));
+  }
+
+  async commandUntrack(message, args, kind = 'any') {
+    const query = args[0]?.trim();
+    if (!query) {
+      const usage = kind === 'wallet'
+        ? usageMessage('/untrackwallet walletaddress', '/untrackwallet So11111111111111111111111111111111111111112')
+        : usageMessage(kind === 'token' ? '/untrackcoin CA_OR_TICKER' : '/untrack CA_OR_TICKER_OR_WALLET', kind === 'token' ? '/untrackcoin $OGRE' : '/untrack $OGRE');
+      await this.telegram.sendMessage(message.chat.id, usage);
+      return;
+    }
+
+    const context = {
+      user: message.from ? this.store.ensureUser(message.from, message.chat.type === 'private' ? message.chat.id : message.from.id) : null,
+      isGroupChat: message.chat.type !== 'private',
+      isGroupAdmin: message.chat.type !== 'private' ? await this.isMessageFromChatAdmin(message) : false
+    };
+
+    if (kind === 'wallet') {
+      await this.commandUntrackWallet(message, query, context);
+      return;
+    }
+
+    if (kind === 'token' || !looksLikeSolanaAddress(query)) {
+      await this.commandUntrackToken(message, query, context);
+      return;
+    }
+
+    const tokenResult = await this.untrackTokenByQuery(message, query, context);
+    const walletResult = await this.untrackWalletByAddress(message, query, context);
+
+    if (tokenResult.removed) await this.sendUntrackTokenResult(message.chat.id, tokenResult);
+    if (walletResult.removed) await this.sendUntrackWalletResult(message.chat.id, walletResult);
+
+    if (!tokenResult.removed && !walletResult.removed) {
+      if (tokenResult.adminBlocked || walletResult.adminBlocked) {
+        await this.telegram.sendMessage(message.chat.id, untrackAdminRequiredMessage(query));
+        return;
+      }
+      await this.telegram.sendMessage(message.chat.id, untrackNotFoundMessage(query, 'watch'));
+    }
+  }
+
+  async commandUntrackToken(message, query, context) {
+    const result = await this.untrackTokenByQuery(message, query, context);
+    if (result.removed) {
+      await this.sendUntrackTokenResult(message.chat.id, result);
+      return;
+    }
+
+    await this.telegram.sendMessage(
+      message.chat.id,
+      result.adminBlocked ? untrackAdminRequiredMessage(query) : untrackNotFoundMessage(query, 'coin watch')
+    );
+  }
+
+  async commandUntrackWallet(message, wallet, context) {
+    if (!looksLikeSolanaAddress(wallet)) {
+      await this.telegram.sendMessage(message.chat.id, usageMessage('/untrackwallet walletaddress', '/untrackwallet So11111111111111111111111111111111111111112'));
+      return;
+    }
+
+    const result = await this.untrackWalletByAddress(message, wallet, context);
+    if (result.removed) {
+      await this.sendUntrackWalletResult(message.chat.id, result);
+      return;
+    }
+
+    await this.telegram.sendMessage(
+      message.chat.id,
+      result.adminBlocked ? untrackAdminRequiredMessage(wallet) : untrackNotFoundMessage(wallet, 'wallet watch')
+    );
+  }
+
+  async untrackTokenByQuery(message, query, context) {
+    const resolved = await this.resolveWatchedToken(message, query);
+    if (!resolved) {
+      return { removed: false, adminBlocked: false };
+    }
+
+    const removedFrom = [];
+    if (context.user && this.store.removeUserTokenWatch(context.user.id, resolved.ca)) {
+      removedFrom.push('your alerts');
+    }
+
+    const group = context.isGroupChat ? this.store.getGroup(message.chat.id) : null;
+    const groupTracked = Boolean(group?.watchTokens?.[resolved.ca]);
+    if (groupTracked && context.isGroupAdmin && this.store.removeGroupTokenWatch(message.chat.id, resolved.ca)) {
+      removedFrom.push('this group');
+    }
+
+    return {
+      removed: removedFrom.length > 0,
+      adminBlocked: groupTracked && !context.isGroupAdmin && removedFrom.length === 0,
+      ca: resolved.ca,
+      symbol: resolved.symbol,
+      removedFrom
+    };
+  }
+
+  async untrackWalletByAddress(message, wallet, context) {
+    const removedFrom = [];
+    let label = 'Watched Wallet';
+
+    const userWatch = context.user?.watchWallets?.[wallet];
+    if (userWatch?.label) label = userWatch.label;
+    if (context.user && this.store.removeUserWalletWatch(context.user.id, wallet)) {
+      removedFrom.push('your alerts');
+    }
+
+    const group = context.isGroupChat ? this.store.getGroup(message.chat.id) : null;
+    const groupWatch = group?.watchWallets?.[wallet];
+    if (groupWatch?.label) label = groupWatch.label;
+    const groupTracked = Boolean(groupWatch);
+    if (groupTracked && context.isGroupAdmin && this.store.removeGroupWalletWatch(message.chat.id, wallet)) {
+      removedFrom.push('this group');
+    }
+
+    return {
+      removed: removedFrom.length > 0,
+      adminBlocked: groupTracked && !context.isGroupAdmin && removedFrom.length === 0,
+      wallet,
+      label,
+      removedFrom
+    };
+  }
+
+  async sendUntrackTokenResult(chatId, result) {
+    await this.telegram.sendMessage(chatId, untrackTokenMessage({
+      ca: result.ca,
+      symbol: result.symbol,
+      removedFrom: result.removedFrom,
+      config: this.config
+    }));
+  }
+
+  async sendUntrackWalletResult(chatId, result) {
+    await this.telegram.sendMessage(chatId, untrackWalletMessage({
+      wallet: result.wallet,
+      label: result.label,
+      removedFrom: result.removedFrom,
+      config: this.config
+    }));
+  }
+
+  async resolveWatchedToken(message, query) {
+    const value = String(query ?? '').trim();
+    if (!value) return null;
+
+    if (looksLikeSolanaAddress(value)) {
+      const symbol = await this.lookupTokenSymbol(value);
+      return { ca: value, symbol };
+    }
+
+    const targetTicker = normalizeTicker(value);
+    if (!targetTicker) return null;
+
+    for (const ca of this.watchedTokenCandidates(message)) {
+      const symbol = await this.lookupTokenSymbol(ca);
+      if (normalizeTicker(symbol) === targetTicker) {
+        return { ca, symbol };
+      }
+    }
+
+    return null;
+  }
+
+  watchedTokenCandidates(message) {
+    const candidates = new Set();
+    if (message.from) {
+      const user = this.store.getUser(message.from.id);
+      Object.keys(user?.watchTokens ?? {}).forEach((ca) => candidates.add(ca));
+    }
+
+    if (message.chat.type !== 'private') {
+      const group = this.store.getGroup(message.chat.id);
+      Object.keys(group?.watchTokens ?? {}).forEach((ca) => candidates.add(ca));
+    }
+
+    return [...candidates];
+  }
+
+  async lookupTokenSymbol(ca) {
+    try {
+      const scan = await this.provider.scanToken(ca);
+      return scan?.symbol ?? '';
+    } catch (error) {
+      console.warn(`[untrack-symbol] ${ca} ${error.message}`);
+      return '';
+    }
   }
 
   async commandNewPairs(chatId) {
@@ -901,6 +1111,7 @@ function commandActionKey(command, args = []) {
   const keys = {
     '/start': 'menu:start',
     '/new': 'market:new',
+    '/newpairs': 'market:new',
     '/trending': 'market:trending:5m',
     '/report': 'market:report',
     '/myalerts': 'menu:alerts',
@@ -917,6 +1128,7 @@ function commandActionKey(command, args = []) {
   if (command === '/portfolio') return `portfolio:${firstArg}`;
   if (command === '/watchtoken') return `watchtoken:${firstArg}:${secondArg}`;
   if (command === '/watchwallet') return `watchwallet:${firstArg}:${secondArg}`;
+  if (command === '/untrack' || command === '/untrackcoin' || command === '/untracktoken' || command === '/untrackwallet') return `untrack:${command}:${firstArg}`;
   return keys[command] ?? `command:${command}:${args.slice(0, 2).join(':')}`;
 }
 
@@ -973,4 +1185,12 @@ function normalizeLooseCommand(text) {
     .replace(/[^a-z0-9]+/g, ' ')
     .trim()
     .replace(/\s+/g, ' ');
+}
+
+function normalizeTicker(value) {
+  return String(value ?? '')
+    .trim()
+    .replace(/^\$/, '')
+    .toUpperCase()
+    .replace(/[^A-Z0-9]/g, '');
 }

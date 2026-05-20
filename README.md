@@ -81,14 +81,11 @@ Backup and restore commands:
 
 `ADMIN_USER_IDS` is not needed for private channel/group backups. A Telegram admin in a private group, private supergroup, or private channel can run `/backup` without being listed in `ADMIN_USER_IDS`. Public chats with a public `@username` are blocked from creating backups. If `BACKUP_CHAT_ID` is blank, the backup file is posted back into the same private chat where `/backup` was run.
 
-Backup shortcuts accepted:
+Backup command:
 
 - `/backup`
-- `backup`
-- `back up`
-- `backup now`
 
-In groups, Telegram may hide ordinary non-command messages from bots when BotFather privacy mode is enabled. Slash commands still work. For the bot to read loose text like `backup` and auto-scan pasted contracts, open BotFather, choose the bot, go to Bot Settings, Group Privacy, and turn privacy off.
+In groups, Telegram may hide ordinary non-command messages from bots when BotFather privacy mode is enabled. Slash commands still work. Auto-scan of pasted contracts needs BotFather Group Privacy turned off, but auto-scan is disabled by default to avoid spam.
 
 The bot auto-registers commands on startup and when Telegram sends a bot membership update after it is added or promoted. Channels get their own channel-scoped command set when Telegram accepts it. Even if Telegram does not show a command menu in a channel, typed commands still work.
 
@@ -135,6 +132,11 @@ Commands must be typed in full. Partial commands such as `/w` are ignored silent
 - `/watchtoken CA` - Watch a token
 - `/watchwallet walletaddress` - Watch a wallet
 - `/new` - View filtered new pairs
+- `/newpairs` - View filtered new pairs
+- `/untrack CA_OR_TICKER_OR_WALLET` - Remove a personal watch, and remove the group watch when used by a group admin
+- `/untrackcoin CA_OR_TICKER` - Remove a watched coin/token by ticker or contract address
+- `/untracktoken CA_OR_TICKER` - Same as `/untrackcoin`
+- `/untrackwallet walletaddress` - Remove a watched wallet
 - `/trending` - View trending tokens
 - `/portfolio walletaddress` - Check a wallet summary
 - `/myalerts` - Manage DM alert cadence
@@ -151,9 +153,9 @@ Commands must be typed in full. Partial commands such as `/w` are ignored silent
 - `/commands` - Refresh command menu
 - `/restore` - Owner-only restore from backup document
 
-The bot registers public commands for everyone and admin commands for group/supergroup admins where Telegram supports admin command scopes. In channels, it registers a channel command set and also accepts plain command words like `ping`, `new`, `trending`, `report`, `groupsettings`, `commands`, and `backup`. Public channels/groups cannot create backups.
+The bot registers public commands for everyone and admin commands for group/supergroup admins where Telegram supports admin command scopes. In channels, it registers a channel command set. Typed slash commands still work even when Telegram does not show a menu. Public channels/groups cannot create backups.
 
-In DMs and groups, the bot also accepts exact plain command words like `ping`, `new`, `trending`, `report`, `commands`, and `backup`. In groups, Telegram only sends plain non-slash messages to bots when BotFather Group Privacy is off. Slash commands like `/ping` should still reach the bot even with privacy on.
+Plain words do not trigger commands. Use exact slash commands like `/ping`, `/new`, or `/newpairs`, or click the bot's buttons.
 
 ## DM And Group Test
 
@@ -188,17 +190,13 @@ For a Telegram channel, add the bot as an admin and give it permission to post m
 
 or:
 
-```text
-ping
-```
-
 Render logs should show a line like:
 
 ```text
 [message] channel:-100123 "/ping"
 ```
 
-If that log does not appear, Telegram is not delivering channel posts to the bot. Remove and re-add the bot as channel admin, then run `/commands` or `commands` in the channel. If the log appears but the channel gets no reply, the bot is receiving messages but does not have permission to post in that channel.
+If that log does not appear, Telegram is not delivering channel posts to the bot. Remove and re-add the bot as channel admin, then run `/commands` in the channel. If the log appears but the channel gets no reply, the bot is receiving messages but does not have permission to post in that channel.
 
 ## Default Alert Philosophy
 

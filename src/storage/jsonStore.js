@@ -249,6 +249,28 @@ export class JsonStore {
     this.save();
   }
 
+  removeUserTokenWatch(userId, ca) {
+    const user = this.getUser(userId);
+    if (!user?.watchTokens?.[ca]) return false;
+
+    delete user.watchTokens[ca];
+    delete user.mutedTokens?.[ca];
+    user.updatedAt = nowIso();
+    this.save();
+    return true;
+  }
+
+  removeUserWalletWatch(userId, wallet) {
+    const user = this.getUser(userId);
+    if (!user?.watchWallets?.[wallet]) return false;
+
+    delete user.watchWallets[wallet];
+    delete user.mutedWallets?.[wallet];
+    user.updatedAt = nowIso();
+    this.save();
+    return true;
+  }
+
   toggleGroupSetting(chatId, key) {
     const group = this.getGroup(chatId);
     if (!group || !(key in group.settings)) return null;
@@ -299,6 +321,26 @@ export class JsonStore {
     group.updatedAt = nowIso();
     this.save();
     return group.watchWallets[wallet];
+  }
+
+  removeGroupTokenWatch(chatId, ca) {
+    const group = this.getGroup(chatId);
+    if (!group?.watchTokens?.[ca]) return false;
+
+    delete group.watchTokens[ca];
+    group.updatedAt = nowIso();
+    this.save();
+    return true;
+  }
+
+  removeGroupWalletWatch(chatId, wallet) {
+    const group = this.getGroup(chatId);
+    if (!group?.watchWallets?.[wallet]) return false;
+
+    delete group.watchWallets[wallet];
+    group.updatedAt = nowIso();
+    this.save();
+    return true;
   }
 
   queueUserAlert(userId, alert) {
