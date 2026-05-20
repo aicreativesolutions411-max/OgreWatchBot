@@ -70,6 +70,7 @@ Public user commands are registered for everyone:
 /report
 /help
 /id
+/ping
 ```
 
 Admin commands are registered for chat admins where Telegram supports admin command scopes:

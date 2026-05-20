@@ -16,9 +16,9 @@ services:
       - key: TELEGRAM_BOT_TOKEN
         sync: false
       - key: BOT_NAME
-        value: "$YOURCOIN Radar"
+        value: Ogres Radar
       - key: BRAND
-        value: "$YOURCOIN"
+        value: Ogres
       - key: DATA_PROVIDER
         value: mock
       - key: DATA_FILE
@@ -63,6 +63,10 @@ services:
         value: 30
       - key: ALERT_TICK_SECONDS
         value: 30
+      - key: DELETE_WEBHOOK_ON_START
+        value: true
+      - key: DROP_PENDING_UPDATES_ON_START
+        value: false
       - key: GROUP_DIGEST_MINUTES
         value: 60
       - key: USER_HOURLY_DIGEST_MINUTES

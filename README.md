@@ -104,6 +104,7 @@ The bot also runs a lightweight heartbeat every `KEEPALIVE_INTERVAL_MINUTES`, 10
 - `/report` - Latest market report
 - `/help` - Help menu
 - `/id` - Show chat/user IDs
+- `/ping` - Test bot status
 
 ## Admin Commands
 
