@@ -1,0 +1,59 @@
+services:
+  - type: worker
+    name: yourcoin-radar-bot
+    runtime: node
+    plan: starter
+    buildCommand: npm install --omit=dev
+    startCommand: npm start
+    maxShutdownDelaySeconds: 120
+    disk:
+      name: radar-data
+      mountPath: /var/data
+      sizeGB: 1
+    envVars:
+      - key: NODE_VERSION
+        value: 20
+      - key: TELEGRAM_BOT_TOKEN
+        sync: false
+      - key: BOT_NAME
+        value: "$YOURCOIN Radar"
+      - key: BRAND
+        value: "$YOURCOIN"
+      - key: DATA_PROVIDER
+        value: mock
+      - key: DATA_FILE
+        value: /var/data/radar-store.json
+      - key: BACKUP_CHAT_ID
+        sync: false
+      - key: ADMIN_USER_IDS
+        sync: false
+      - key: ALLOW_CHAT_ADMIN_BACKUP
+        value: true
+      - key: BACKUP_INTERVAL_MINUTES
+        value: 1440
+      - key: BACKUP_ON_START
+        value: true
+      - key: BACKUP_ON_SHUTDOWN
+        value: true
+      - key: BACKUP_SKIP_UNCHANGED
+        value: true
+      - key: ENABLE_RESTORE_COMMAND
+        value: true
+      - key: MAX_BACKUP_BYTES
+        value: 45000000
+      - key: KEEPALIVE_INTERVAL_MINUTES
+        value: 5
+      - key: KEEPALIVE_URL
+        value: ""
+      - key: ENABLE_HEALTH_SERVER
+        value: false
+      - key: POLL_TIMEOUT_SECONDS
+        value: 30
+      - key: ALERT_TICK_SECONDS
+        value: 30
+      - key: GROUP_DIGEST_MINUTES
+        value: 60
+      - key: USER_HOURLY_DIGEST_MINUTES
+        value: 60
+      - key: USER_DAILY_DIGEST_HOUR
+        value: 9

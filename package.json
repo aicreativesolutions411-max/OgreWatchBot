@@ -1,0 +1,14 @@
+{
+  "name": "yourcoin-radar-bot",
+  "version": "0.1.0",
+  "description": "Telegram Radar bot for Solana token, wallet, new-pair, trending, digest, and group-safe alerts.",
+  "type": "module",
+  "private": true,
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "start": "node src/index.js",
+    "check": "node src/scripts/check.js"
+  }
+}

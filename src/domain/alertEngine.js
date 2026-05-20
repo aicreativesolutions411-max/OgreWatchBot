@@ -1,0 +1,221 @@
+import { AntiSpam } from './antiSpam.js';
+import { actionButtons, reportKeyboard } from '../ui/keyboards.js';
+import {
+  digestMessage,
+  groupActivitySpikeMessage,
+  liquidityAlertMessage,
+  marketReportMessage,
+  tokenMilestoneMessage,
+  walletAlertMessage
+} from '../ui/messages.js';
+
+export class AlertEngine {
+  constructor({ config, store, telegram, provider }) {
+    this.config = config;
+    this.store = store;
+    this.telegram = telegram;
+    this.provider = provider;
+    this.antiSpam = new AntiSpam(store);
+  }
+
+  async processWatchedEvents() {
+    const events = await this.provider.pollWatchedEvents(this.store.watchedContext());
+    for (const event of events) {
+      await this.routeEvent(event);
+    }
+  }
+
+  async routeEvent(event) {
+    if (event.type === 'wallet_trade') {
+      await this.routeWalletTrade(event);
+      return;
+    }
+
+    if (event.type === 'multi_wallet') {
+      await this.routeGroupSpike(event);
+      return;
+    }
+
+    if (event.type === 'milestone') {
+      await this.routeTokenMilestone(event);
+      return;
+    }
+
+    if (event.type === 'liquidity') {
+      await this.routeLiquidityAlert(event);
+    }
+  }
+
+  async routeWalletTrade(alert) {
+    const users = this.store.usersWatchingWallet(alert.wallet);
+    for (const user of users) {
+      const watch = user.watchWallets[alert.wallet];
+      if (!walletWatchAllows(watch, alert)) continue;
+
+      await this.sendOrQueueUserAlert(user, {
+        title: `${alert.walletLabel} ${alert.side} ${alert.symbol}`,
+        summary: `${alert.solAmount} SOL at ${alert.marketCapUsd} MC`,
+        importance: alert.importance ?? 'important',
+        ca: alert.ca,
+        text: walletAlertMessage(alert, this.config)
+      });
+    }
+  }
+
+  async routeGroupSpike(alert) {
+    for (const group of Object.values(this.store.data.groups)) {
+      if (!group.settings.whaleAlerts) continue;
+      if (this.antiSpam.isQuietNow(group.settings)) continue;
+      if (!this.antiSpam.canSendGroupTokenAlert(group.id, alert.ca, group.settings.cooldownMinutes)) continue;
+
+      await this.telegram.sendMessage(
+        group.id,
+        groupActivitySpikeMessage(alert, this.config),
+        actionButtons(this.config, alert.ca)
+      );
+    }
+  }
+
+  async routeTokenMilestone(alert) {
+    const users = this.store.usersWatchingToken(alert.ca);
+    for (const user of users) {
+      const watch = user.watchTokens[alert.ca];
+      if (!tokenWatchAllows(watch, 'price')) continue;
+
+      await this.sendOrQueueUserAlert(user, {
+        title: `${alert.symbol} milestone`,
+        summary: `${alert.movePercent}% move to ${alert.marketCapUsd} MC`,
+        importance: 'important',
+        ca: alert.ca,
+        text: tokenMilestoneMessage(alert, this.config)
+      });
+    }
+
+    for (const group of Object.values(this.store.data.groups)) {
+      if (this.antiSpam.isQuietNow(group.settings)) continue;
+      if (!this.antiSpam.canSendMilestone(`group:${group.id}`, alert.ca, alert.movePercent)) continue;
+      await this.telegram.sendMessage(
+        group.id,
+        tokenMilestoneMessage(alert, this.config),
+        actionButtons(this.config, alert.ca)
+      );
+    }
+  }
+
+  async routeLiquidityAlert(alert) {
+    const users = this.store.usersWatchingToken(alert.ca);
+    for (const user of users) {
+      const watch = user.watchTokens[alert.ca];
+      if (!tokenWatchAllows(watch, 'liquidity')) continue;
+
+      await this.sendOrQueueUserAlert(user, {
+        title: `${alert.symbol} liquidity changed`,
+        summary: `${alert.changePercent}% liquidity move`,
+        importance: 'important',
+        ca: alert.ca,
+        text: liquidityAlertMessage(alert, this.config)
+      });
+    }
+  }
+
+  async sendOrQueueUserAlert(user, alert) {
+    if (this.antiSpam.isQuietNow(user.settings)) {
+      this.store.queueUserAlert(user.id, alert);
+      return;
+    }
+
+    const mode = user.settings.alertMode;
+    if (mode === 'silent') return;
+
+    if (mode === 'hourly' || mode === 'daily') {
+      this.store.queueUserAlert(user.id, alert);
+      return;
+    }
+
+    if (mode === 'important' && alert.importance !== 'important' && alert.importance !== 'major') {
+      this.store.queueUserAlert(user.id, alert);
+      return;
+    }
+
+    try {
+      await this.telegram.sendMessage(user.chatId, alert.text, actionButtons(this.config, alert.ca));
+      this.store.setUserDmStatus(user.id, true);
+    } catch (error) {
+      this.store.setUserDmStatus(user.id, false);
+      this.store.queueUserAlert(user.id, alert);
+      console.warn(`[dm-failed] user=${user.id} ${error.message}`);
+    }
+  }
+
+  async runScheduledDigests() {
+    await this.runGroupDigests();
+    await this.runUserDigests();
+  }
+
+  async runGroupDigests() {
+    const now = Date.now();
+    const intervalMs = this.config.groupDigestMinutes * 60 * 1000;
+
+    for (const group of Object.values(this.store.data.groups)) {
+      if (!group.settings.trendingDigest) continue;
+      if (this.antiSpam.isQuietNow(group.settings)) continue;
+
+      const lastSent = this.store.data.meta.lastGroupDigestAt[group.id] ?? 0;
+      if (now - lastSent < intervalMs) continue;
+
+      const report = await this.provider.getMarketReport();
+      await this.telegram.sendMessage(
+        group.id,
+        marketReportMessage(report, this.config),
+        reportKeyboard()
+      );
+      this.store.data.meta.lastGroupDigestAt[group.id] = now;
+      this.store.save();
+    }
+  }
+
+  async runUserDigests() {
+    const now = Date.now();
+    const hourlyMs = this.config.userHourlyDigestMinutes * 60 * 1000;
+    const currentHour = new Date().getHours();
+
+    for (const user of Object.values(this.store.data.users)) {
+      const queue = user.alertQueue ?? [];
+      if (!queue.length || user.settings.alertMode === 'silent') continue;
+
+      const lastSent = this.store.data.meta.lastUserDigestAt[user.id] ?? 0;
+      const dueHourly = user.settings.alertMode === 'hourly' && now - lastSent >= hourlyMs;
+      const dueDaily = user.settings.alertMode === 'daily' && currentHour >= this.config.userDailyDigestHour && now - lastSent >= 20 * 60 * 60 * 1000;
+
+      if (!dueHourly && !dueDaily) continue;
+
+      const alerts = this.store.clearUserAlertQueue(user.id);
+      if (!alerts.length) continue;
+
+      try {
+        await this.telegram.sendMessage(user.chatId, digestMessage(alerts, this.config), reportKeyboard());
+        this.store.data.meta.lastUserDigestAt[user.id] = now;
+        this.store.setUserDmStatus(user.id, true);
+        this.store.save();
+      } catch (error) {
+        for (const alert of alerts) this.store.queueUserAlert(user.id, alert);
+        this.store.setUserDmStatus(user.id, false);
+        console.warn(`[digest-failed] user=${user.id} ${error.message}`);
+      }
+    }
+  }
+}
+
+function walletWatchAllows(watch, alert) {
+  if (!watch || watch.mode === 'silent') return false;
+  if (watch.mode === 'all') return true;
+  if (watch.mode === 'buys') return alert.side === 'bought';
+  if (watch.mode === 'sells') return alert.side === 'sold' || alert.side === 'sold out';
+  return alert.importance === 'important' || alert.importance === 'major';
+}
+
+function tokenWatchAllows(watch, eventType) {
+  if (!watch || watch.mode === 'silent') return false;
+  if (watch.mode === 'important') return true;
+  return watch.mode === eventType || watch.types?.includes(eventType);
+}
