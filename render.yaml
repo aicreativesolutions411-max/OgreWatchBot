@@ -6,10 +6,6 @@ services:
     buildCommand: npm install --omit=dev
     startCommand: npm start
     maxShutdownDelaySeconds: 120
-    disk:
-      name: radar-data
-      mountPath: /var/data
-      sizeGB: 1
     envVars:
       - key: NODE_VERSION
         value: 20
@@ -23,6 +19,10 @@ services:
         value: mock
       - key: DATA_FILE
         value: /tmp/yourcoin-radar/radar-store.json
+      - key: DATA_FALLBACK_FILE
+        value: /tmp/yourcoin-radar/radar-store.json
+      - key: ALLOW_VAR_DATA_FILE
+        value: false
       - key: SOCIAL_FOOTER_ENABLED
         value: true
       - key: SOCIAL_FOOTER_TITLE

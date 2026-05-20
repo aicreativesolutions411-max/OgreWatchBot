@@ -46,13 +46,13 @@ SOCIAL_TWITTER_URL=https://twitter.com/i/communities/1930265213917425858
 
 Telegram long polling does not need public HTTP traffic, but Render Web Services require an open HTTP port. This bot opens a small health server on `0.0.0.0:$PORT`, so Render deploys cleanly and `/health` returns 200.
 
-The Blueprint includes a persistent disk section, but the default data file uses Render's writable temp path so the bot works even when `/var/data` is not mounted or allowed:
+The Blueprint uses Render's writable temp path for the data file:
 
 ```text
 /tmp/yourcoin-radar/radar-store.json
 ```
 
-Telegram backups are still enabled because Render temp storage is ephemeral, and backups give you an off-Render recovery copy in your private chat. If you set `DATA_FILE=/var/data/radar-store.json` and Render blocks that path, the bot automatically switches to a writable fallback instead of breaking polling.
+Telegram backups are still enabled because Render temp storage is ephemeral, and backups give you an off-Render recovery copy in your private chat. If `DATA_FILE` is accidentally left as `/var/data/radar-store.json`, the bot rewrites it to `/tmp/yourcoin-radar/radar-store.json` unless `ALLOW_VAR_DATA_FILE=true`.
 
 ## 4. User vs admin commands
 

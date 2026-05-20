@@ -93,7 +93,7 @@ The bot also runs a lightweight heartbeat every `KEEPALIVE_INTERVAL_MINUTES`, 10
 
 `RESET_TELEGRAM_OFFSET_ON_START=true` is enabled by default so a stale saved Telegram update offset cannot make the bot look online while ignoring new DMs or group commands.
 
-On Render, the default data file is `/tmp/yourcoin-radar/radar-store.json` because that path is writable on Web Services. If you set `DATA_FILE=/var/data/radar-store.json` without a working mounted disk, Render can throw `EACCES: permission denied, mkdir '/var/data'`. The bot now falls back to a writable temp file automatically if that happens.
+On Render, the default data file is `/tmp/yourcoin-radar/radar-store.json` because that path is writable on Web Services. If `DATA_FILE` is accidentally left as `/var/data/radar-store.json`, the bot rewrites it to `/tmp/yourcoin-radar/radar-store.json` unless `ALLOW_VAR_DATA_FILE=true`. Startup logs print the exact data file path the bot is using.
 
 ## User Commands
 

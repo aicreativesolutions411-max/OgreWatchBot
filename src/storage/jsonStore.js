@@ -1,4 +1,5 @@
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import { DEFAULT_GROUP_SETTINGS, DEFAULT_USER_SETTINGS } from '../domain/defaults.js';
 import { nowIso } from '../utils/format.js';
@@ -16,32 +17,64 @@ const EMPTY_DATA = {
 };
 
 export class JsonStore {
-  constructor(filePath) {
+  constructor(filePath, options = {}) {
+    this.requestedFilePath = filePath;
     this.filePath = filePath;
+    this.fallbackFilePath = options.fallbackFilePath ?? path.join(os.tmpdir(), 'yourcoin-radar', 'radar-store.json');
+    this.usingFallback = false;
     this.data = this.#load();
   }
 
   #load() {
-    if (!fs.existsSync(this.filePath)) {
-      return structuredClone(EMPTY_DATA);
+    const paths = [this.filePath, this.fallbackFilePath].filter(Boolean);
+    for (const filePath of [...new Set(paths)]) {
+      try {
+        if (!fs.existsSync(filePath)) continue;
+
+        const parsed = JSON.parse(fs.readFileSync(filePath, 'utf8'));
+        this.filePath = filePath;
+        this.usingFallback = filePath !== this.requestedFilePath;
+        if (this.usingFallback) {
+          console.warn(`[store] using fallback data file ${filePath}`);
+        }
+        return {
+          ...structuredClone(EMPTY_DATA),
+          ...parsed,
+          meta: {
+            ...structuredClone(EMPTY_DATA.meta),
+            ...(parsed.meta ?? {})
+          }
+        };
+      } catch (error) {
+        if (!isRecoverableFileError(error)) throw error;
+        console.warn(`[store] cannot read ${filePath}: ${error.message}`);
+      }
     }
 
-    const parsed = JSON.parse(fs.readFileSync(this.filePath, 'utf8'));
-    return {
-      ...structuredClone(EMPTY_DATA),
-      ...parsed,
-      meta: {
-        ...structuredClone(EMPTY_DATA.meta),
-        ...(parsed.meta ?? {})
-      }
-    };
+    return structuredClone(EMPTY_DATA);
   }
 
   save() {
-    fs.mkdirSync(path.dirname(this.filePath), { recursive: true });
-    const tempFile = `${this.filePath}.tmp`;
+    try {
+      this.#write(this.filePath);
+    } catch (error) {
+      if (!this.fallbackFilePath || this.filePath === this.fallbackFilePath || !isRecoverableFileError(error)) {
+        throw error;
+      }
+
+      console.warn(`[store] cannot write ${this.filePath}: ${error.message}`);
+      console.warn(`[store] switching to fallback data file ${this.fallbackFilePath}`);
+      this.filePath = this.fallbackFilePath;
+      this.usingFallback = true;
+      this.#write(this.filePath);
+    }
+  }
+
+  #write(filePath) {
+    fs.mkdirSync(path.dirname(filePath), { recursive: true });
+    const tempFile = `${filePath}.tmp`;
     fs.writeFileSync(tempFile, `${JSON.stringify(this.data, null, 2)}\n`);
-    fs.renameSync(tempFile, this.filePath);
+    fs.renameSync(tempFile, filePath);
   }
 
   replaceData(nextData) {
@@ -241,6 +274,10 @@ export class JsonStore {
       wallets: [...new Set(Object.values(this.data.users).flatMap((user) => Object.keys(user.watchWallets)))]
     };
   }
+}
+
+function isRecoverableFileError(error) {
+  return ['EACCES', 'EPERM', 'EROFS', 'ENOENT'].includes(error?.code);
 }
 
 function normalizeStoreData(value) {

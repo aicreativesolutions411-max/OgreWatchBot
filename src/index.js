@@ -11,7 +11,14 @@ import { TelegramApi } from './telegram/api.js';
 export async function main() {
   requireBotToken(config);
 
-  const store = new JsonStore(config.dataFile);
+  if (config.dataFileWasRewritten) {
+    console.warn(`[config] DATA_FILE=${config.requestedDataFile} is blocked by default on Render; using ${config.dataFile}`);
+  }
+  console.log(`[config] data file: ${config.dataFile}`);
+
+  const store = new JsonStore(config.dataFile, {
+    fallbackFilePath: config.dataFallbackFile
+  });
   const telegram = new TelegramApi(config.telegramToken, {
     footerHtml: buildSocialFooter(config)
   });

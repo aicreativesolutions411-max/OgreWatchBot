@@ -57,6 +57,9 @@ function firstNonEmpty(...values) {
 }
 
 const defaultHealthServerEnabled = !!process.env.PORT || process.env.RENDER === 'true';
+const defaultRenderDataFile = '/tmp/yourcoin-radar/radar-store.json';
+const requestedDataFile = firstNonEmpty(process.env.DATA_FILE, './data/radar-store.json');
+const resolvedDataFile = resolveDataFile(requestedDataFile);
 
 export const config = {
   projectRoot,
@@ -64,7 +67,10 @@ export const config = {
   botName: process.env.BOT_NAME ?? 'Ogres Radar',
   brand: process.env.BRAND ?? 'Ogres',
   dataProvider: process.env.DATA_PROVIDER ?? 'mock',
-  dataFile: path.resolve(projectRoot, process.env.DATA_FILE ?? './data/radar-store.json'),
+  requestedDataFile,
+  dataFile: resolvedDataFile,
+  dataFallbackFile: resolveDataFile(firstNonEmpty(process.env.DATA_FALLBACK_FILE, defaultRenderDataFile)),
+  dataFileWasRewritten: normalizePath(requestedDataFile).startsWith('/var/data') && !booleanFromEnv('ALLOW_VAR_DATA_FILE', false),
   scanUrlTemplate: process.env.SCAN_URL_TEMPLATE ?? 'https://dexscreener.com/solana/{ca}',
   buyUrlTemplate: process.env.BUY_URL_TEMPLATE ?? 'https://jup.ag/swap/SOL-{ca}',
   chartUrlTemplate: process.env.CHART_URL_TEMPLATE ?? 'https://dexscreener.com/solana/{ca}',
@@ -105,4 +111,17 @@ export function requireBotToken(appConfig) {
   if (!appConfig.telegramToken) {
     throw new Error('Missing TELEGRAM_BOT_TOKEN. Copy .env.example to .env and set your BotFather token.');
   }
+}
+
+function resolveDataFile(filePath) {
+  const normalized = normalizePath(filePath);
+  const safePath = normalized.startsWith('/var/data') && !booleanFromEnv('ALLOW_VAR_DATA_FILE', false)
+    ? defaultRenderDataFile
+    : filePath;
+
+  return path.isAbsolute(safePath) ? safePath : path.resolve(projectRoot, safePath);
+}
+
+function normalizePath(filePath) {
+  return String(filePath ?? '').replaceAll('\\', '/');
 }
