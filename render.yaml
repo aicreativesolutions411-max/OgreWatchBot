@@ -22,7 +22,7 @@ services:
       - key: DATA_PROVIDER
         value: mock
       - key: DATA_FILE
-        value: /var/data/radar-store.json
+        value: /tmp/yourcoin-radar/radar-store.json
       - key: SOCIAL_FOOTER_ENABLED
         value: true
       - key: SOCIAL_FOOTER_TITLE

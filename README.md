@@ -32,7 +32,7 @@ This repo includes `render.yaml` for a Git-backed Render Web Service. Render lin
    - `TELEGRAM_BOT_TOKEN`
    - `BACKUP_CHAT_ID` if you want backups sent to private DM
    - `ADMIN_USER_IDS` if you want private `/restore`
-4. Keep `DATA_FILE=/var/data/radar-store.json` on Render. The Blueprint mounts a persistent disk at `/var/data`.
+4. Keep the default `DATA_FILE=/tmp/yourcoin-radar/radar-store.json` unless you have a mounted Render disk. If you add a persistent disk later, point `DATA_FILE` at that mounted path.
 
 The bot still uses Telegram long polling, but it also opens a small HTTP health server so Render Web Services see an open port and do not fail with `No open ports detected`.
 
@@ -92,6 +92,8 @@ The Render Blueprint runs this as a Web Service and binds to `0.0.0.0:$PORT`. Th
 The bot also runs a lightweight heartbeat every `KEEPALIVE_INTERVAL_MINUTES`, 10 minutes by default. It calls Telegram `getMe` and pings `KEEPALIVE_URL`; on Render Web Services, `KEEPALIVE_URL` automatically falls back to `RENDER_EXTERNAL_URL`, which helps keep the service active during quiet periods.
 
 `RESET_TELEGRAM_OFFSET_ON_START=true` is enabled by default so a stale saved Telegram update offset cannot make the bot look online while ignoring new DMs or group commands.
+
+On Render, the default data file is `/tmp/yourcoin-radar/radar-store.json` because that path is writable on Web Services. If you set `DATA_FILE=/var/data/radar-store.json` without a working mounted disk, Render can throw `EACCES: permission denied, mkdir '/var/data'`. The bot now falls back to a writable temp file automatically if that happens.
 
 ## User Commands
 
