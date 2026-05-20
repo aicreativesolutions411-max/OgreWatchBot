@@ -42,7 +42,8 @@ const PUBLIC_COMMANDS = [
   { command: 'mywatchlist', description: 'View watchlist' },
   { command: 'report', description: 'Latest market report' },
   { command: 'help', description: 'Help menu' },
-  { command: 'id', description: 'Show chat and user IDs' }
+  { command: 'id', description: 'Show chat and user IDs' },
+  { command: 'ping', description: 'Test bot status' }
 ];
 
 const ADMIN_COMMANDS = [
@@ -67,14 +68,17 @@ export class RadarBot {
     this.alertEngine = alertEngine;
     this.backupManager = backupManager;
     this.antiSpam = new AntiSpam(store);
+    this.commandRefreshSeenChatIds = new Set();
     this.stopped = false;
   }
 
   async start() {
+    await this.prepareTelegramPolling();
     this.botUser = await this.telegram.getMe();
+    await this.prepareUpdateOffset();
     await this.registerGlobalCommands();
     await this.registerKnownChatCommands();
-    console.log(`[ready] ${this.config.botName} polling Telegram updates.`);
+    console.log(`[ready] ${this.config.botName} polling Telegram updates from offset ${this.store.data.meta.offset}.`);
 
     setInterval(() => {
       this.alertEngine.processWatchedEvents().catch((error) => console.warn('[alert-tick]', error.message));
@@ -90,7 +94,7 @@ export class RadarBot {
         const updates = await this.telegram.getUpdates({
           offset: this.store.data.meta.offset,
           timeout: this.config.pollTimeoutSeconds,
-          allowed_updates: ['message', 'channel_post', 'my_chat_member', 'callback_query']
+          allowed_updates: ['message', 'edited_message', 'channel_post', 'edited_channel_post', 'my_chat_member', 'callback_query']
         });
 
         for (const update of updates) {
@@ -110,8 +114,18 @@ export class RadarBot {
       return;
     }
 
+    if (update.edited_message) {
+      await this.handleMessage(update.edited_message, { edited: true });
+      return;
+    }
+
     if (update.channel_post) {
       await this.handleMessage(update.channel_post);
+      return;
+    }
+
+    if (update.edited_channel_post) {
+      await this.handleMessage(update.edited_channel_post, { edited: true });
       return;
     }
 
@@ -125,16 +139,24 @@ export class RadarBot {
     }
   }
 
-  async handleMessage(message) {
+  async handleMessage(message, options = {}) {
     const chat = message.chat;
     const from = message.from;
     const text = message.text ?? message.caption ?? '';
+
+    if (!chat) return;
+
+    this.logIncomingMessage(message, { edited: options.edited });
 
     if (chat.type === 'private' && from) {
       this.store.ensureUser(from, chat.id);
     } else {
       this.store.ensureGroup(chat);
       if (from) this.store.ensureUser(from, from.id);
+    }
+
+    if (text.trim().startsWith('/') && chat.type !== 'private') {
+      await this.registerChatCommandsOnce(chat);
     }
 
     if (message.document && isLooseRestoreCommand(text)) {
@@ -144,6 +166,10 @@ export class RadarBot {
 
     if (text.trim().startsWith('/')) {
       await this.handleCommand(message, text);
+      return;
+    }
+
+    if (await this.handleLooseTextCommand(message, text)) {
       return;
     }
 
@@ -160,6 +186,27 @@ export class RadarBot {
     if (chat.type !== 'private') {
       await this.handleGroupAutoScan(message);
     }
+  }
+
+  logIncomingMessage(message, options = {}) {
+    const text = message.text ?? message.caption ?? '';
+    if (!text) return;
+
+    const normalized = normalizeLooseCommand(text);
+    const shouldLog = message.chat?.type === 'channel' || text.trim().startsWith('/') || isLooseBotCommand(normalized);
+    if (!shouldLog) return;
+
+    const edited = options.edited ? ' edited' : '';
+    const preview = text.replace(/\s+/g, ' ').slice(0, 80);
+    console.log(`[message]${edited} ${message.chat.type}:${message.chat.id} "${preview}"`);
+  }
+
+  async handleLooseTextCommand(message, text) {
+    const command = looseTextCommand(text);
+    if (!command) return false;
+
+    await this.handleCommand(message, `/${command}`);
+    return true;
   }
 
   async handleCommand(message, text) {
@@ -218,6 +265,9 @@ export class RadarBot {
         break;
       case '/id':
         await this.commandId(message);
+        break;
+      case '/ping':
+        await this.commandPing(message);
         break;
       case '/commands':
         await this.commandRefreshCommands(message);
@@ -352,6 +402,17 @@ export class RadarBot {
   async commandReport(chatId) {
     const report = await this.provider.getMarketReport();
     await this.telegram.sendMessage(chatId, marketReportMessage(report, this.config), reportKeyboard());
+  }
+
+  async commandPing(message) {
+    await this.telegram.sendMessage(
+      message.chat.id,
+      [
+        'Pong. Bot is online.',
+        `Chat type: <code>${message.chat.type}</code>`,
+        `Chat ID: <code>${message.chat.id}</code>`
+      ].join('\n')
+    );
   }
 
   async commandRefreshCommands(message) {
@@ -559,6 +620,46 @@ export class RadarBot {
     }
   }
 
+  async prepareTelegramPolling() {
+    if (!this.config.deleteWebhookOnStart) return;
+
+    await this.telegram.deleteWebhook({
+      drop_pending_updates: this.config.dropPendingUpdatesOnStart
+    }).catch((error) => {
+      console.warn(`[webhook] deleteWebhook failed: ${error.message}`);
+    });
+
+    await this.telegram.getWebhookInfo().then((info) => {
+      if (info.url) {
+        console.warn(`[webhook] still configured: ${info.url}`);
+      } else {
+        console.log('[webhook] cleared; long polling enabled');
+      }
+    }).catch((error) => {
+      console.warn(`[webhook] getWebhookInfo failed: ${error.message}`);
+    });
+  }
+
+  async prepareUpdateOffset() {
+    const meta = this.store.data.meta;
+    const botId = String(this.botUser?.id ?? '');
+    const botUsername = this.botUser?.username ?? '';
+    const previousBotId = String(meta.telegramBotId ?? '');
+    const shouldReset = this.config.resetTelegramOffsetOnStart || (previousBotId && previousBotId !== botId);
+
+    if (shouldReset && meta.offset !== 0) {
+      console.log(`[telegram] resetting stored update offset from ${meta.offset} to 0`);
+      meta.offset = 0;
+    }
+
+    meta.telegramBotId = botId;
+    meta.telegramBotUsername = botUsername;
+    this.store.save();
+
+    const handle = botUsername ? `@${botUsername}` : botId;
+    console.log(`[telegram] logged in as ${handle}`);
+  }
+
   async registerGlobalCommands() {
     const publicScopes = [
       { type: 'default' },
@@ -590,19 +691,37 @@ export class RadarBot {
 
       if (!(await this.botIsAdminInChat(chat.id))) continue;
       const result = await this.registerChatCommands(chat);
+      this.commandRefreshSeenChatIds.add(String(chat.id));
       console.log(`[commands] startup ${chat.type}:${chat.id} ${result.status}`);
     }
   }
 
-  async registerChatCommands(chat) {
-    if (chat.type === 'channel') {
-      return {
-        status: 'skipped-channel-scope',
-        message: 'Commands are globally registered, and channel /backup works when the bot is admin. Telegram does not support per-channel command menu scopes.'
-      };
-    }
+  async registerChatCommandsOnce(chat) {
+    const chatId = String(chat.id);
+    if (this.commandRefreshSeenChatIds.has(chatId)) return;
+    this.commandRefreshSeenChatIds.add(chatId);
 
+    if (!(await this.botIsAdminInChat(chat.id))) return;
+    const result = await this.registerChatCommands(chat);
+    console.log(`[commands] seen ${chat.type}:${chat.id} ${result.status}`);
+  }
+
+  async registerChatCommands(chat) {
     try {
+      if (chat.type === 'channel') {
+        await this.telegram.setMyCommands(isPublicTelegramChat(chat) ? ALL_ADMIN_COMMANDS : PRIVATE_CHAT_ADMIN_COMMANDS, {
+          scope: {
+            type: 'chat',
+            chat_id: chat.id
+          }
+        });
+
+        return {
+          status: 'registered-channel',
+          message: 'Commands refreshed for this channel. If Telegram does not show a menu here, typed commands like /ping and ping still work.'
+        };
+      }
+
       await this.telegram.setMyCommands(PUBLIC_COMMANDS, {
         scope: {
           type: 'chat',
@@ -714,6 +833,37 @@ function isLooseBackupCommand(text) {
     'bot backup',
     'radar backup'
   ].includes(normalized);
+}
+
+function isLooseBotCommand(normalized) {
+  return Boolean(looseTextCommand(normalized));
+}
+
+function looseTextCommand(text) {
+  const normalized = normalizeLooseCommand(text);
+  const aliases = {
+    start: 'start',
+    menu: 'start',
+    help: 'help',
+    ping: 'ping',
+    id: 'id',
+    new: 'new',
+    pairs: 'new',
+    'new pairs': 'new',
+    trending: 'trending',
+    report: 'report',
+    commands: 'commands',
+    settings: 'groupsettings',
+    'group settings': 'groupsettings',
+    groupsettings: 'groupsettings',
+    backup: 'backup',
+    'back up': 'backup',
+    'backup now': 'backup',
+    'back up now': 'backup',
+    restore: 'restore'
+  };
+
+  return aliases[normalized] ?? '';
 }
 
 function isLooseRestoreCommand(text) {

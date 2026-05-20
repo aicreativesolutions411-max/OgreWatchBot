@@ -81,7 +81,7 @@ Backup shortcuts accepted:
 
 In groups, Telegram may hide ordinary non-command messages from bots when BotFather privacy mode is enabled. Slash commands still work. For the bot to read loose text like `backup` and auto-scan pasted contracts, open BotFather, choose the bot, go to Bot Settings, Group Privacy, and turn privacy off.
 
-The bot auto-registers commands on startup and when Telegram sends a bot membership update after it is added or promoted. Telegram supports command scopes for private chats, groups, supergroups, and chat administrators; private channel posts still respond to `/backup` when the bot is admin, but Telegram does not expose a per-channel command menu scope.
+The bot auto-registers commands on startup and when Telegram sends a bot membership update after it is added or promoted. Channels get their own channel-scoped command set when Telegram accepts it. Even if Telegram does not show a command menu in a channel, typed commands still work.
 
 Automatic backups run on start, shutdown, and once per `BACKUP_INTERVAL_MINUTES`. Unchanged backups are skipped by default so your private chat does not get noisy.
 
@@ -90,6 +90,8 @@ Automatic backups run on start, shutdown, and once per `BACKUP_INTERVAL_MINUTES`
 The Render Blueprint runs this as a Web Service and binds to `0.0.0.0:$PORT`. The bot serves `/health`, `/healthz`, and `/ready`.
 
 The bot also runs a lightweight heartbeat every `KEEPALIVE_INTERVAL_MINUTES`, 10 minutes by default. It calls Telegram `getMe` and pings `KEEPALIVE_URL`; on Render Web Services, `KEEPALIVE_URL` automatically falls back to `RENDER_EXTERNAL_URL`, which helps keep the service active during quiet periods.
+
+`RESET_TELEGRAM_OFFSET_ON_START=true` is enabled by default so a stale saved Telegram update offset cannot make the bot look online while ignoring new DMs or group commands.
 
 ## User Commands
 
@@ -113,7 +115,54 @@ The bot also runs a lightweight heartbeat every `KEEPALIVE_INTERVAL_MINUTES`, 10
 - `/commands` - Refresh command menu
 - `/restore` - Owner-only restore from backup document
 
-The bot registers public commands for everyone and admin commands for group/supergroup admins where Telegram supports admin command scopes. In channels, Telegram does not support per-channel admin command menus, but admin commands still work when typed by a private-channel admin. Public channels/groups cannot create backups.
+The bot registers public commands for everyone and admin commands for group/supergroup admins where Telegram supports admin command scopes. In channels, it registers a channel command set and also accepts plain command words like `ping`, `new`, `trending`, `report`, `groupsettings`, `commands`, and `backup`. Public channels/groups cannot create backups.
+
+In DMs and groups, the bot also accepts exact plain command words like `ping`, `new`, `trending`, `report`, `commands`, and `backup`. In groups, Telegram only sends plain non-slash messages to bots when BotFather Group Privacy is off. Slash commands like `/ping` should still reach the bot even with privacy on.
+
+## DM And Group Test
+
+After deploy, DM the bot:
+
+```text
+/ping
+```
+
+Then try the same in the group:
+
+```text
+/ping
+```
+
+Render logs should show:
+
+```text
+[message] private:123 "/ping"
+[message] group:-100123 "/ping"
+```
+
+If the DM log does not appear, the Render service is not polling Telegram, the token is wrong, or another running copy of the same bot token is stealing updates. If the group log appears but there is no reply, the bot is receiving the command but cannot post in that group.
+
+## Channel Command Checklist
+
+For a Telegram channel, add the bot as an admin and give it permission to post messages. Then create a new channel post with:
+
+```text
+/ping
+```
+
+or:
+
+```text
+ping
+```
+
+Render logs should show a line like:
+
+```text
+[message] channel:-100123 "/ping"
+```
+
+If that log does not appear, Telegram is not delivering channel posts to the bot. Remove and re-add the bot as channel admin, then run `/commands` or `commands` in the channel. If the log appears but the channel gets no reply, the bot is receiving messages but does not have permission to post in that channel.
 
 ## Default Alert Philosophy
 

@@ -25,6 +25,7 @@ export function helpMessage(config) {
     '/report - Latest market report',
     '/help - Help menu',
     '/id - Show chat and user IDs',
+    '/ping - Test bot status',
     '',
     '<b>Admin commands</b>',
     '/groupsettings - Group alert settings',

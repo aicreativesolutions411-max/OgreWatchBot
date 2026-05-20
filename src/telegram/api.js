@@ -41,6 +41,14 @@ export class TelegramApi {
     return this.call('getUpdates', payload);
   }
 
+  deleteWebhook(options = {}) {
+    return this.call('deleteWebhook', options);
+  }
+
+  getWebhookInfo() {
+    return this.call('getWebhookInfo');
+  }
+
   getMe() {
     return this.call('getMe');
   }

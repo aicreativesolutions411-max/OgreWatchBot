@@ -82,7 +82,7 @@ Admin commands are registered for chat admins where Telegram supports admin comm
 /restore
 ```
 
-In channels, Telegram does not support per-channel admin command menus, but admin commands still work when typed by a private-channel admin.
+In channels, the bot registers a channel command set when Telegram accepts the channel scope. Typed commands still work either way.
 
 ## 5. Backup and restore
 
@@ -96,9 +96,11 @@ Before restoring, the bot tries to send a `pre-restore` backup to your backup ch
 
 ## 6. Message reading in groups/channels
 
-The bot listens for both normal messages and channel posts. It accepts:
+The bot listens for normal messages, edited messages, channel posts, and edited channel posts. It accepts:
 
 ```text
+/ping
+ping
 /backup
 backup
 back up
@@ -113,7 +115,11 @@ BotFather -> your bot -> Bot Settings -> Group Privacy -> Turn off
 
 Slash commands like `/backup` are the most reliable option when privacy mode is on.
 
-The bot registers commands on startup and again when it receives Telegram's bot membership update after being added or promoted. Telegram command menu scopes work for private chats, groups, supergroups, and chat administrators. Private channels can still run `/backup`, but Telegram does not support per-channel command menu scopes. Public chats cannot create backups.
+The bot registers commands on startup and again when it receives Telegram's bot membership update after being added or promoted. Telegram command menu scopes work for private chats, groups, supergroups, chat administrators, and channel chat scopes when Telegram accepts them. Private channels can run `/backup` or plain `backup`. Public chats cannot create backups.
+
+For channels, the bot must be an admin with permission to post messages. Test with `/ping` or plain `ping` as a new channel post. If Render logs show `[message] channel:...` but the channel gets no reply, the bot can read the post but cannot post back. If no `[message] channel:...` log appears, remove and re-add the bot as channel admin, then run `/commands` or `commands`.
+
+For DMs and groups, test with `/ping` first. Render logs should show `[message] private:... "/ping"` or `[message] group:... "/ping"`. If DMs do not show up in logs, check that `TELEGRAM_BOT_TOKEN` is the exact token for the bot you are messaging and that no other local/Render copy is running the same token. Telegram will usually log a polling conflict when two copies are running.
 
 ## 7. Render keepalive
 
@@ -127,6 +133,7 @@ It calls Telegram `getMe`, serves `/health`, and pings `KEEPALIVE_URL`. On Rende
 
 ```text
 ENABLE_HEALTH_SERVER=true
+RESET_TELEGRAM_OFFSET_ON_START=true
 ```
 
 Then `/health` will respond on Render's `PORT`.
