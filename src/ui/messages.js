@@ -129,21 +129,23 @@ export function scanMessage(scan, config) {
     `Market Cap: <b>${usd(scan.marketCapUsd)}</b>`,
     `Liquidity: <b>${usd(scan.liquidityUsd)}</b>`,
     `Volume 5m: <b>${usd(scan.volume5mUsd)}</b>`,
-    `Holders: <b>${scan.holders.toLocaleString('en-US')}</b>`,
+    `Holders: <b>${numberOrUnknown(scan.holders)}</b>`,
     `Risk: <b>${escapeHtml(scan.risk)}</b>`,
     '',
-    `Mint disabled: <b>${scan.mintDisabled ? 'Yes' : 'No'}</b>`,
-    `Freeze disabled: <b>${scan.freezeDisabled ? 'Yes' : 'No'}</b>`,
+    `Mint disabled: <b>${yesNoUnknown(scan.mintDisabled)}</b>`,
+    `Freeze disabled: <b>${yesNoUnknown(scan.freezeDisabled)}</b>`,
   ].join('\n');
 }
 
-export function newPairsMessage(pairs) {
+export function newPairsMessage(pairs, status = null) {
   const lines = ['🆕 <b>New Solana Pairs</b>', ''];
+  lines.push(...marketStatusLines(status));
+  if (status) lines.push('');
   pairs.forEach((pair, index) => {
     lines.push(`${index + 1}. <b>${escapeHtml(pair.symbol)}</b> - ${minutesAgo(pair.ageMinutes)} - ${usd(pair.marketCapUsd)} MC - ${usd(pair.liquidityUsd)} liq`);
   });
   lines.push('');
-  lines.push('Filters: liq over $10K, volume over $20K, mint/freeze disabled.');
+  lines.push('Filters: liq over $10K, volume over $20K, market cap range.');
   return lines.join('\n');
 }
 
@@ -155,14 +157,16 @@ export function newPairFiltersMessage() {
     `Minimum liquidity: <b>${usd(f.minLiquidityUsd)}</b>`,
     `Minimum volume: <b>${usd(f.minVolumeUsd)}</b>`,
     `Market cap range: <b>${usd(f.minMarketCapUsd)}-${usd(f.maxMarketCapUsd)}</b>`,
-    `Mint disabled: <b>${f.mintDisabled ? 'Yes' : 'No'}</b>`,
-    `Freeze disabled: <b>${f.freezeDisabled ? 'Yes' : 'No'}</b>`,
+    'Mint disabled: <b>Unknown on DexScreener source</b>',
+    'Freeze disabled: <b>Unknown on DexScreener source</b>',
     'Cooldown: <b>10 minutes</b>'
   ].join('\n');
 }
 
-export function trendingMessage(tokens, label = 'Trending') {
+export function trendingMessage(tokens, label = 'Trending', status = null) {
   const lines = [`🔥 <b>${escapeHtml(label)}</b>`, ''];
+  lines.push(...marketStatusLines(status));
+  if (status) lines.push('');
   tokens.forEach((token, index) => {
     lines.push(`${index + 1}. <b>${escapeHtml(token.symbol)}</b> ${percent(token.movePercent)} - ${escapeHtml(token.reason)}`);
   });
@@ -186,8 +190,10 @@ export function portfolioMessage(summary) {
   ].join('\n');
 }
 
-export function marketReportMessage(report, config) {
+export function marketReportMessage(report, config, status = null) {
   const lines = [`🛰 <b>Solana Radar Update by ${escapeHtml(config.brand)}</b>`, ''];
+  lines.push(...marketStatusLines(status));
+  if (status) lines.push('');
   lines.push('<b>Top watched tokens</b>');
   report.topTokens.forEach((token, index) => {
     lines.push(`${index + 1}. <b>${escapeHtml(token.symbol)}</b> ${percent(token.movePercent)} - ${escapeHtml(token.reason)}`);
@@ -264,4 +270,35 @@ export function usageMessage(command, example) {
 
 function onOff(value) {
   return value ? 'ON' : 'OFF';
+}
+
+function yesNoUnknown(value) {
+  if (value == null) return 'Unknown';
+  return value ? 'Yes' : 'No';
+}
+
+function numberOrUnknown(value) {
+  const number = Number(value);
+  if (!Number.isFinite(number) || number <= 0) return 'Unknown';
+  return number.toLocaleString('en-US');
+}
+
+function marketStatusLines(status) {
+  if (!status) return [];
+  const lines = [`Data: <b>${escapeHtml(status.source ?? 'Market')}</b> - updated <b>${escapeHtml(ageLabel(status.refreshedAt))}</b>`];
+  if (status.error) lines.push(`Last refresh error: <code>${escapeHtml(status.error)}</code>`);
+  return lines;
+}
+
+function ageLabel(value) {
+  const time = Date.parse(value);
+  if (!Number.isFinite(time)) return 'not yet';
+
+  const seconds = Math.max(0, Math.floor((Date.now() - time) / 1000));
+  if (seconds < 5) return 'just now';
+  if (seconds < 60) return `${seconds}s ago`;
+  const minutes = Math.floor(seconds / 60);
+  if (minutes < 60) return `${minutes}m ago`;
+  const hours = Math.floor(minutes / 60);
+  return `${hours}h ago`;
 }

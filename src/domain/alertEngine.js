@@ -166,7 +166,7 @@ export class AlertEngine {
       const report = await this.provider.getMarketReport();
       await this.telegram.sendMessage(
         group.id,
-        marketReportMessage(report, this.config),
+        marketReportMessage(report, this.config, this.provider.marketStatus?.()),
         reportKeyboard()
       );
       this.store.data.meta.lastGroupDigestAt[group.id] = now;

@@ -7,7 +7,7 @@ A clean Telegram bot scaffold for the Radar/Watchtower idea:
 - Watches can be silent, instant, important-only, hourly, or daily.
 - Buttons route users to scan, buy, chart, watch, or mute without cluttering chat.
 
-The project has no npm dependencies. It uses Telegram's Bot API through Node's built-in `fetch` and stores state in a local JSON file.
+The project has no npm dependencies. It uses Telegram's Bot API and DEX Screener's public API through Node's built-in `fetch`, then stores state in a local JSON file.
 
 ## Quick Start
 
@@ -94,6 +94,19 @@ The bot also runs a lightweight heartbeat every `KEEPALIVE_INTERVAL_MINUTES`, 10
 `RESET_TELEGRAM_OFFSET_ON_START=true` is enabled by default so a stale saved Telegram update offset cannot make the bot look online while ignoring new DMs or group commands.
 
 On Render, the default data file is `/tmp/yourcoin-radar/radar-store.json` because that path is writable on Web Services. If `DATA_FILE` is accidentally left as `/var/data/radar-store.json`, the bot rewrites it to `/tmp/yourcoin-radar/radar-store.json` unless `ALLOW_VAR_DATA_FILE=true`. Startup logs print the exact data file path the bot is using.
+
+## Live Market Refresh
+
+Render defaults to live market data:
+
+```text
+DATA_PROVIDER=dexscreener
+MARKET_REFRESH_INTERVAL_SECONDS=60
+DEXSCREENER_API_BASE=https://api.dexscreener.com
+DEXSCREENER_SEARCH_QUERIES=SOL/USDC,SOL,pump,raydium
+```
+
+The bot refreshes DEX Screener data silently in the background every minute. It does not post each refresh. Commands like `/new`, `/trending`, `/report`, and token scans read from the latest cache and show a data freshness line. If the API is temporarily unavailable, the bot keeps running and falls back to mock data instead of hanging commands.
 
 ## User Commands
 
@@ -195,7 +208,7 @@ The bot tracks silently by default when needed, sends most details to DMs, and o
 
 ## Data Provider
 
-`src/providers/mockSolanaProvider.js` returns deterministic demo data so the bot can run immediately. Replace that provider with real Solana sources such as Helius, Birdeye, DexScreener, Jupiter, or your own indexer.
+`src/providers/dexScreenerProvider.js` refreshes public DEX Screener data every minute by default. `src/providers/mockSolanaProvider.js` remains as an offline fallback so the bot can still run if live data is unavailable.
 
 The rest of the bot is already shaped around provider methods:
 
@@ -218,7 +231,8 @@ src/
     antiSpam.js                  Cooldowns, milestones, quiet hours
     defaults.js                  Defaults and alert modes
   providers/
-    mockSolanaProvider.js        Swap this for live Solana data
+    dexScreenerProvider.js       Live public market cache
+    mockSolanaProvider.js        Offline fallback
   storage/
     jsonStore.js                 Local JSON persistence
   telegram/

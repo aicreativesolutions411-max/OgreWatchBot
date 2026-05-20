@@ -2,6 +2,7 @@ import { pathToFileURL } from 'node:url';
 import { config, requireBotToken } from './config.js';
 import { RadarBot } from './bot.js';
 import { AlertEngine } from './domain/alertEngine.js';
+import { DexScreenerProvider } from './providers/dexScreenerProvider.js';
 import { MockSolanaProvider } from './providers/mockSolanaProvider.js';
 import { BackupManager } from './services/backupManager.js';
 import { KeepAliveService } from './services/keepAliveService.js';
@@ -22,19 +23,23 @@ export async function main() {
   const telegram = new TelegramApi(config.telegramToken, {
     footerHtml: buildSocialFooter(config)
   });
-  const provider = new MockSolanaProvider(config);
+  const mockProvider = new MockSolanaProvider(config);
+  const provider = config.dataProvider === 'dexscreener'
+    ? new DexScreenerProvider(config, mockProvider)
+    : mockProvider;
   const backupManager = new BackupManager({ config, store, telegram });
   const keepAliveService = new KeepAliveService({ config, telegram });
   const alertEngine = new AlertEngine({ config, store, telegram, provider });
 
   const bot = new RadarBot({ config, store, telegram, provider, alertEngine, backupManager });
-  installShutdownHooks({ config, bot, backupManager, keepAliveService });
+  installShutdownHooks({ config, bot, backupManager, keepAliveService, provider });
   backupManager.start();
   keepAliveService.start();
+  provider.start?.();
   await bot.start();
 }
 
-function installShutdownHooks({ config: appConfig, bot, backupManager, keepAliveService }) {
+function installShutdownHooks({ config: appConfig, bot, backupManager, keepAliveService, provider }) {
   let shuttingDown = false;
 
   const shutdown = async (signal) => {
@@ -43,6 +48,7 @@ function installShutdownHooks({ config: appConfig, bot, backupManager, keepAlive
     console.log(`[shutdown] ${signal} received.`);
     bot.stop();
     keepAliveService.stop();
+    provider.stop?.();
 
     if (appConfig.backupOnShutdown) {
       await backupManager.sendBackup(`shutdown:${signal}`, {

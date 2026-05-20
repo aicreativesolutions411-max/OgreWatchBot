@@ -16,7 +16,7 @@ services:
       - key: BRAND
         value: Ogres
       - key: DATA_PROVIDER
-        value: mock
+        value: dexscreener
       - key: DATA_FILE
         value: /tmp/yourcoin-radar/radar-store.json
       - key: DATA_FALLBACK_FILE
@@ -62,6 +62,14 @@ services:
       - key: POLL_TIMEOUT_SECONDS
         value: 30
       - key: ALERT_TICK_SECONDS
+        value: 30
+      - key: MARKET_REFRESH_INTERVAL_SECONDS
+        value: 60
+      - key: DEXSCREENER_API_BASE
+        value: https://api.dexscreener.com
+      - key: DEXSCREENER_SEARCH_QUERIES
+        value: SOL/USDC,SOL,pump,raydium
+      - key: DEXSCREENER_MAX_TOKENS
         value: 30
       - key: DELETE_WEBHOOK_ON_START
         value: true

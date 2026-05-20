@@ -96,6 +96,15 @@ export class MockSolanaProvider {
     return [];
   }
 
+  marketStatus() {
+    return {
+      source: 'Mock',
+      refreshedAt: new Date().toISOString(),
+      pairCount: SAMPLE_CONTRACTS.length,
+      error: ''
+    };
+  }
+
   demoWalletAlert(ca = SAMPLE_CONTRACTS[0]) {
     return {
       type: 'wallet_trade',

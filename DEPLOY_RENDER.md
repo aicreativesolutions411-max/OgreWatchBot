@@ -42,6 +42,17 @@ SOCIAL_WEBSITE_URL=https://ogremode.com/
 SOCIAL_TWITTER_URL=https://twitter.com/i/communities/1930265213917425858
 ```
 
+Live market refresh is also included:
+
+```text
+DATA_PROVIDER=dexscreener
+MARKET_REFRESH_INTERVAL_SECONDS=60
+DEXSCREENER_API_BASE=https://api.dexscreener.com
+DEXSCREENER_SEARCH_QUERIES=SOL/USDC,SOL,pump,raydium
+```
+
+The bot refreshes market data silently once per minute. It does not post each refresh; commands such as `/new`, `/trending`, and `/report` use the fresh cache and show the last update age.
+
 ## 3. Why this uses a web service
 
 Telegram long polling does not need public HTTP traffic, but Render Web Services require an open HTTP port. This bot opens a small health server on `0.0.0.0:$PORT`, so Render deploys cleanly and `/health` returns 200.

@@ -347,12 +347,12 @@ export class RadarBot {
 
   async commandNewPairs(chatId) {
     const pairs = await this.provider.getNewPairs(NEW_PAIR_DEFAULT_FILTERS);
-    await this.telegram.sendMessage(chatId, newPairsMessage(pairs), newPairsKeyboard());
+    await this.telegram.sendMessage(chatId, newPairsMessage(pairs, this.provider.marketStatus?.()), newPairsKeyboard());
   }
 
   async commandTrending(chatId, kind) {
     const trending = await this.provider.getTrending(kind);
-    await this.telegram.sendMessage(chatId, trendingMessage(trending.tokens, trending.label), trendingKeyboard());
+    await this.telegram.sendMessage(chatId, trendingMessage(trending.tokens, trending.label, this.provider.marketStatus?.()), trendingKeyboard());
   }
 
   async commandPortfolio(chatId, args) {
@@ -401,7 +401,7 @@ export class RadarBot {
 
   async commandReport(chatId) {
     const report = await this.provider.getMarketReport();
-    await this.telegram.sendMessage(chatId, marketReportMessage(report, this.config), reportKeyboard());
+    await this.telegram.sendMessage(chatId, marketReportMessage(report, this.config, this.provider.marketStatus?.()), reportKeyboard());
   }
 
   async commandPing(message) {
