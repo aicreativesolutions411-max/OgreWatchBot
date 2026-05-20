@@ -24,17 +24,36 @@ Telegram bots can only DM users after those users have started the bot privately
 
 ## Render + Git Deploy
 
-This repo includes `render.yaml` for a Git-backed Render Background Worker. Render links to a GitHub/GitLab/Bitbucket branch and redeploys when you push to that branch.
+This repo includes `render.yaml` for a Git-backed Render Web Service. Render links to a GitHub/GitLab/Bitbucket branch and redeploys when you push to that branch.
 
 1. Push this folder to a Git repo.
 2. In Render, create a Blueprint from the repo.
 3. Fill the secret env vars Render asks for:
    - `TELEGRAM_BOT_TOKEN`
-   - `BACKUP_CHAT_ID`
-   - `ADMIN_USER_IDS`
+   - `BACKUP_CHAT_ID` if you want backups sent to private DM
+   - `ADMIN_USER_IDS` if you want private `/restore`
 4. Keep `DATA_FILE=/var/data/radar-store.json` on Render. The Blueprint mounts a persistent disk at `/var/data`.
 
-Background workers are the right fit for long-polling Telegram bots because they run continuously without needing inbound HTTP traffic.
+The bot still uses Telegram long polling, but it also opens a small HTTP health server so Render Web Services see an open port and do not fail with `No open ports detected`.
+
+## Social Footer
+
+Bot messages include this footer by default:
+
+```text
+Powered by Ogres
+Telegram | Website | Twitter
+```
+
+Default links:
+
+```text
+SOCIAL_TELEGRAM_URL=https://t.me/ogrecoinonsol
+SOCIAL_WEBSITE_URL=https://ogremode.com/
+SOCIAL_TWITTER_URL=https://twitter.com/i/communities/1930265213917425858
+```
+
+Set `SOCIAL_FOOTER_ENABLED=false` to turn it off.
 
 ## Private Telegram Backups
 
@@ -45,13 +64,13 @@ BACKUP_CHAT_ID=your_private_chat_id
 ADMIN_USER_IDS=your_private_chat_id
 ```
 
-Owner commands:
+Backup and restore commands:
 
-- `/backup` - DM a fresh JSON backup to `BACKUP_CHAT_ID`
+- `/backup` - Admin-only backup
 - `/restore` - attach a backup JSON file in private chat with caption `/restore`
 - `/id` - show your Telegram user/chat IDs
 
-`ADMIN_USER_IDS` is still recommended for private restore. For backup, a Telegram admin in the group, supergroup, or channel can run `/backup` without being listed in `ADMIN_USER_IDS`; the backup still goes to `BACKUP_CHAT_ID`.
+`ADMIN_USER_IDS` is not needed for private channel/group backups. A Telegram admin in a private group, private supergroup, or private channel can run `/backup` without being listed in `ADMIN_USER_IDS`. Public chats with a public `@username` are blocked from creating backups. If `BACKUP_CHAT_ID` is blank, the backup file is posted back into the same private chat where `/backup` was run.
 
 Backup shortcuts accepted:
 
@@ -62,15 +81,17 @@ Backup shortcuts accepted:
 
 In groups, Telegram may hide ordinary non-command messages from bots when BotFather privacy mode is enabled. Slash commands still work. For the bot to read loose text like `backup` and auto-scan pasted contracts, open BotFather, choose the bot, go to Bot Settings, Group Privacy, and turn privacy off.
 
+The bot auto-registers commands on startup and when Telegram sends a bot membership update after it is added or promoted. Telegram supports command scopes for private chats, groups, supergroups, and chat administrators; private channel posts still respond to `/backup` when the bot is admin, but Telegram does not expose a per-channel command menu scope.
+
 Automatic backups run on start, shutdown, and once per `BACKUP_INTERVAL_MINUTES`. Unchanged backups are skipped by default so your private chat does not get noisy.
 
 ## Render Keepalive
 
-The Render Blueprint runs this as a Background Worker. The bot also runs a lightweight heartbeat every `KEEPALIVE_INTERVAL_MINUTES` by calling Telegram `getMe`, so Render logs show the process is alive.
+The Render Blueprint runs this as a Web Service and binds to `0.0.0.0:$PORT`. The bot serves `/health`, `/healthz`, and `/ready`.
 
-If you later deploy it as a web service, set `ENABLE_HEALTH_SERVER=true` and Render's `PORT` will serve `/health`. You can also set `KEEPALIVE_URL` if you want the bot to ping an external health URL.
+The bot also runs a lightweight heartbeat every `KEEPALIVE_INTERVAL_MINUTES`, 10 minutes by default. It calls Telegram `getMe` and pings `KEEPALIVE_URL`; on Render Web Services, `KEEPALIVE_URL` automatically falls back to `RENDER_EXTERNAL_URL`, which helps keep the service active during quiet periods.
 
-## Commands
+## User Commands
 
 - `/start` - Open the main menu
 - `/watchtoken CA` - Watch a token
@@ -80,12 +101,18 @@ If you later deploy it as a web service, set `ENABLE_HEALTH_SERVER=true` and Ren
 - `/portfolio walletaddress` - Check a wallet summary
 - `/myalerts` - Manage DM alert cadence
 - `/mywatchlist` - View watched tokens and wallets
-- `/groupsettings` - Admin-only group settings
 - `/report` - Latest market report
 - `/help` - Help menu
-- `/backup` - Owner-only private backup
-- `/restore` - Owner-only restore from backup document
 - `/id` - Show chat/user IDs
+
+## Admin Commands
+
+- `/groupsettings` - Admin-only group settings
+- `/backup` - Admin-only backup in private chats only
+- `/commands` - Refresh command menu
+- `/restore` - Owner-only restore from backup document
+
+The bot registers public commands for everyone and admin commands for group/supergroup admins where Telegram supports admin command scopes. In channels, Telegram does not support per-channel admin command menus, but admin commands still work when typed by a private-channel admin. Public channels/groups cannot create backups.
 
 ## Default Alert Philosophy
 

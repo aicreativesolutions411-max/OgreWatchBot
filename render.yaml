@@ -1,5 +1,5 @@
 services:
-  - type: worker
+  - type: web
     name: yourcoin-radar-bot
     runtime: node
     plan: starter
@@ -23,12 +23,24 @@ services:
         value: mock
       - key: DATA_FILE
         value: /var/data/radar-store.json
+      - key: SOCIAL_FOOTER_ENABLED
+        value: true
+      - key: SOCIAL_FOOTER_TITLE
+        value: Powered by Ogres
+      - key: SOCIAL_TELEGRAM_URL
+        value: https://t.me/ogrecoinonsol
+      - key: SOCIAL_WEBSITE_URL
+        value: https://ogremode.com/
+      - key: SOCIAL_TWITTER_URL
+        value: https://twitter.com/i/communities/1930265213917425858
       - key: BACKUP_CHAT_ID
-        sync: false
+        value: ""
       - key: ADMIN_USER_IDS
-        sync: false
+        value: ""
       - key: ALLOW_CHAT_ADMIN_BACKUP
         value: true
+      - key: BACKUP_ALLOW_PUBLIC_CHATS
+        value: false
       - key: BACKUP_INTERVAL_MINUTES
         value: 1440
       - key: BACKUP_ON_START
@@ -42,11 +54,11 @@ services:
       - key: MAX_BACKUP_BYTES
         value: 45000000
       - key: KEEPALIVE_INTERVAL_MINUTES
-        value: 5
+        value: 10
       - key: KEEPALIVE_URL
         value: ""
       - key: ENABLE_HEALTH_SERVER
-        value: false
+        value: true
       - key: POLL_TIMEOUT_SECONDS
         value: 30
       - key: ALERT_TICK_SECONDS

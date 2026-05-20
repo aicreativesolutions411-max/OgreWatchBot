@@ -12,7 +12,9 @@ export async function main() {
   requireBotToken(config);
 
   const store = new JsonStore(config.dataFile);
-  const telegram = new TelegramApi(config.telegramToken);
+  const telegram = new TelegramApi(config.telegramToken, {
+    footerHtml: buildSocialFooter(config)
+  });
   const provider = new MockSolanaProvider(config);
   const backupManager = new BackupManager({ config, store, telegram });
   const keepAliveService = new KeepAliveService({ config, telegram });
@@ -46,6 +48,23 @@ function installShutdownHooks({ config: appConfig, bot, backupManager, keepAlive
 
   process.once('SIGINT', () => shutdown('SIGINT'));
   process.once('SIGTERM', () => shutdown('SIGTERM'));
+}
+
+function buildSocialFooter(appConfig) {
+  if (!appConfig.socialFooterEnabled) return '';
+
+  return [
+    `<b>${escapeHtml(appConfig.socialFooterTitle)}</b>`,
+    `<a href="${escapeHtml(appConfig.socialTelegramUrl)}">Telegram</a> | <a href="${escapeHtml(appConfig.socialWebsiteUrl)}">Website</a> | <a href="${escapeHtml(appConfig.socialTwitterUrl)}">Twitter</a>`
+  ].join('\n');
+}
+
+function escapeHtml(value) {
+  return String(value ?? '')
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;');
 }
 
 if (isEntrypoint()) {

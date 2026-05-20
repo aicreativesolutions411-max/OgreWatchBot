@@ -1,13 +1,16 @@
 import { ALERT_MODES } from '../domain/defaults.js';
 import { linkFromTemplate } from '../utils/format.js';
 
-export function mainMenuKeyboard() {
-  return inlineKeyboard([
+export function mainMenuKeyboard(options = {}) {
+  const rows = [
     [callbackButton('Watch Token', 'menu:watchtoken'), callbackButton('Watch Wallet', 'menu:watchwallet')],
     [callbackButton('New Pairs', 'menu:new'), callbackButton('Trending', 'menu:trending')],
     [callbackButton('My Alerts', 'menu:alerts'), callbackButton('My Watchlist', 'menu:watchlist')],
-    [callbackButton('Group Settings', 'menu:groupsettings'), callbackButton('Daily Report', 'menu:report')]
-  ]);
+    options.showAdmin
+      ? [callbackButton('Group Settings', 'menu:groupsettings'), callbackButton('Daily Report', 'menu:report')]
+      : [callbackButton('Daily Report', 'menu:report')]
+  ];
+  return inlineKeyboard(rows);
 }
 
 export function alertPrefsKeyboard(activeMode) {

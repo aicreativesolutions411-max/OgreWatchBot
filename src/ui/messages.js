@@ -13,7 +13,7 @@ export function helpMessage(config) {
   return [
     `🛰 <b>${escapeHtml(config.botName)}</b>`,
     '',
-    '<b>Commands</b>',
+    '<b>User commands</b>',
     '/start - Open main menu',
     '/watchtoken CA - Watch a token',
     '/watchwallet walletaddress - Watch a wallet',
@@ -22,12 +22,15 @@ export function helpMessage(config) {
     '/portfolio walletaddress - Check wallet summary',
     '/myalerts - Manage DM alerts',
     '/mywatchlist - View watched tokens and wallets',
-    '/groupsettings - Admin group settings',
     '/report - Latest market report',
     '/help - Help menu',
-    '/backup - Owner-only backup',
-    '/restore - Owner-only restore',
     '/id - Show chat and user IDs',
+    '',
+    '<b>Admin commands</b>',
+    '/groupsettings - Group alert settings',
+    '/backup - Admin backup',
+    '/restore - Owner-only restore',
+    '/commands - Refresh command menu',
     '',
     'DMs carry detailed updates. Groups get filtered highlights and digests.'
   ].join('\n');
@@ -130,8 +133,6 @@ export function scanMessage(scan, config) {
     '',
     `Mint disabled: <b>${scan.mintDisabled ? 'Yes' : 'No'}</b>`,
     `Freeze disabled: <b>${scan.freezeDisabled ? 'Yes' : 'No'}</b>`,
-    '',
-    `Powered by ${escapeHtml(config.brand)}`
   ].join('\n');
 }
 
@@ -208,8 +209,6 @@ export function walletAlertMessage(alert, config) {
     `Liquidity: <b>${usd(alert.liquidityUsd)}</b>`,
     '',
     `Reason sent: ${escapeHtml(alert.reason)}`,
-    '',
-    `Powered by ${escapeHtml(config.brand)}`
   ].join('\n');
 }
 
@@ -221,8 +220,6 @@ export function groupActivitySpikeMessage(alert, config) {
     `Total: <b>${sol(alert.totalSol)}</b>`,
     `MC: <b>${usd(alert.marketCapBeforeUsd)} → ${usd(alert.marketCapAfterUsd)}</b>`,
     `Volume 5m: <b>${usd(alert.volume5mUsd)}</b>`,
-    '',
-    `Powered by ${escapeHtml(config.brand)}`
   ].join('\n');
 }
 
@@ -234,8 +231,6 @@ export function tokenMilestoneMessage(alert, config) {
     `Move: <b>${percent(alert.movePercent)}</b> in ${alert.window}`,
     `Volume: <b>${usd(alert.volumeUsd)}</b>`,
     `Holders: <b>${alert.holders.toLocaleString('en-US')}</b>`,
-    '',
-    `Powered by ${escapeHtml(config.brand)}`
   ].join('\n');
 }
 
@@ -247,8 +242,6 @@ export function liquidityAlertMessage(alert, config) {
     `Before: <b>${usd(alert.beforeUsd)}</b>`,
     `Now: <b>${usd(alert.afterUsd)}</b>`,
     `Change: <b>${percent(alert.changePercent)}</b>`,
-    '',
-    `Powered by ${escapeHtml(config.brand)}`
   ].join('\n');
 }
 

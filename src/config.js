@@ -48,6 +48,16 @@ function listFromEnv(name) {
     .filter(Boolean);
 }
 
+function firstNonEmpty(...values) {
+  for (const value of values) {
+    const text = String(value ?? '').trim();
+    if (text) return text;
+  }
+  return '';
+}
+
+const defaultHealthServerEnabled = !!process.env.PORT || process.env.RENDER === 'true';
+
 export const config = {
   projectRoot,
   telegramToken: process.env.TELEGRAM_BOT_TOKEN ?? '',
@@ -58,6 +68,11 @@ export const config = {
   scanUrlTemplate: process.env.SCAN_URL_TEMPLATE ?? 'https://dexscreener.com/solana/{ca}',
   buyUrlTemplate: process.env.BUY_URL_TEMPLATE ?? 'https://jup.ag/swap/SOL-{ca}',
   chartUrlTemplate: process.env.CHART_URL_TEMPLATE ?? 'https://dexscreener.com/solana/{ca}',
+  socialFooterEnabled: booleanFromEnv('SOCIAL_FOOTER_ENABLED', true),
+  socialFooterTitle: process.env.SOCIAL_FOOTER_TITLE ?? 'Powered by Ogres',
+  socialTelegramUrl: process.env.SOCIAL_TELEGRAM_URL ?? 'https://t.me/ogrecoinonsol',
+  socialWebsiteUrl: process.env.SOCIAL_WEBSITE_URL ?? 'https://ogremode.com/',
+  socialTwitterUrl: process.env.SOCIAL_TWITTER_URL ?? 'https://twitter.com/i/communities/1930265213917425858',
   pollTimeoutSeconds: numberFromEnv('POLL_TIMEOUT_SECONDS', 30),
   alertTickSeconds: numberFromEnv('ALERT_TICK_SECONDS', 30),
   groupDigestMinutes: numberFromEnv('GROUP_DIGEST_MINUTES', 60),
@@ -66,17 +81,19 @@ export const config = {
   backupChatId: process.env.BACKUP_CHAT_ID ?? '',
   adminUserIds: listFromEnv('ADMIN_USER_IDS'),
   allowChatAdminBackup: booleanFromEnv('ALLOW_CHAT_ADMIN_BACKUP', true),
+  backupAllowPublicChats: booleanFromEnv('BACKUP_ALLOW_PUBLIC_CHATS', false),
   backupIntervalMinutes: numberFromEnv('BACKUP_INTERVAL_MINUTES', 1440),
   backupOnStart: booleanFromEnv('BACKUP_ON_START', true),
   backupOnShutdown: booleanFromEnv('BACKUP_ON_SHUTDOWN', true),
   backupSkipUnchanged: booleanFromEnv('BACKUP_SKIP_UNCHANGED', true),
   enableRestoreCommand: booleanFromEnv('ENABLE_RESTORE_COMMAND', true),
   maxBackupBytes: numberFromEnv('MAX_BACKUP_BYTES', 45_000_000),
-  keepAliveIntervalMinutes: numberFromEnv('KEEPALIVE_INTERVAL_MINUTES', 5),
-  keepAliveUrl: process.env.KEEPALIVE_URL ?? '',
-  enableHealthServer: booleanFromEnv('ENABLE_HEALTH_SERVER', false),
+  keepAliveIntervalMinutes: numberFromEnv('KEEPALIVE_INTERVAL_MINUTES', 10),
+  keepAliveUrl: firstNonEmpty(process.env.KEEPALIVE_URL, process.env.RENDER_EXTERNAL_URL),
+  enableHealthServer: booleanFromEnv('ENABLE_HEALTH_SERVER', defaultHealthServerEnabled),
   healthHost: process.env.HEALTH_HOST ?? '0.0.0.0',
-  healthPort: numberFromEnv('PORT', 0),
+  healthPort: numberFromEnv('PORT', 10000),
+  renderExternalUrl: firstNonEmpty(process.env.RENDER_EXTERNAL_URL),
   renderServiceName: process.env.RENDER_SERVICE_NAME ?? process.env.RENDER_SERVICE_ID ?? '',
   enableDemoCommands: booleanFromEnv('ENABLE_DEMO_COMMANDS', false)
 };

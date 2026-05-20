@@ -92,6 +92,8 @@ export class JsonStore {
       this.data.groups[id] = {
         id,
         title: chat.title ?? chat.username ?? 'Group',
+        type: chat.type ?? 'group',
+        username: chat.username ?? '',
         settings: structuredClone(DEFAULT_GROUP_SETTINGS),
         watchTokens: {},
         watchWallets: {},
@@ -103,6 +105,8 @@ export class JsonStore {
 
     const group = this.data.groups[id];
     group.title = chat.title ?? group.title;
+    group.type = chat.type ?? group.type ?? 'group';
+    group.username = chat.username ?? group.username ?? '';
     group.updatedAt = nowIso();
     this.save();
     return group;

@@ -41,13 +41,15 @@ export class KeepAliveService {
 
   startHealthServer() {
     this.server = http.createServer((request, response) => {
-      if (request.url === '/health' || request.url === '/') {
+      if (request.url === '/health' || request.url === '/healthz' || request.url === '/ready' || request.url === '/') {
         const body = JSON.stringify({
           ok: true,
           bot: this.config.botName,
+          service: this.config.renderServiceName,
           startedAt: this.startedAt.toISOString(),
           lastPingAt: this.lastPingAt?.toISOString() ?? null,
-          lastPingOk: this.lastPingOk
+          lastPingOk: this.lastPingOk,
+          keepAliveUrlConfigured: !!this.config.keepAliveUrl
         });
         response.writeHead(200, { 'content-type': 'application/json' });
         response.end(body);
@@ -66,7 +68,12 @@ export class KeepAliveService {
   async ping(reason) {
     const bot = await this.telegram.getMe();
     if (this.config.keepAliveUrl) {
-      const response = await fetch(this.config.keepAliveUrl, {
+      const url = new URL(this.config.keepAliveUrl);
+      if (url.pathname === '/') {
+        url.pathname = '/health';
+      }
+
+      const response = await fetch(url, {
         method: 'GET',
         signal: AbortSignal.timeout(10000)
       });
@@ -77,6 +84,7 @@ export class KeepAliveService {
 
     this.lastPingAt = new Date();
     this.lastPingOk = true;
-    console.log(`[keepalive] ${reason} ok as @${bot.username ?? bot.id}`);
+    const target = this.config.keepAliveUrl ? ` and pinged ${this.config.keepAliveUrl}` : '';
+    console.log(`[keepalive] ${reason} ok as @${bot.username ?? bot.id}${target}`);
   }
 }

@@ -31,7 +31,7 @@ import {
 } from './ui/messages.js';
 import { findSolanaAddresses, looksLikeSolanaAddress } from './utils/solana.js';
 
-const COMMANDS = [
+const PUBLIC_COMMANDS = [
   { command: 'start', description: 'Open main menu' },
   { command: 'watchtoken', description: 'Watch a token' },
   { command: 'watchwallet', description: 'Watch a wallet' },
@@ -40,13 +40,23 @@ const COMMANDS = [
   { command: 'portfolio', description: 'Check wallet summary' },
   { command: 'myalerts', description: 'Manage alerts' },
   { command: 'mywatchlist', description: 'View watchlist' },
-  { command: 'groupsettings', description: 'Admin group settings' },
   { command: 'report', description: 'Latest market report' },
   { command: 'help', description: 'Help menu' },
-  { command: 'backup', description: 'Owner-only backup' },
-  { command: 'restore', description: 'Owner-only restore' },
   { command: 'id', description: 'Show chat and user IDs' }
 ];
+
+const ADMIN_COMMANDS = [
+  { command: 'groupsettings', description: 'Admin group settings' },
+  { command: 'commands', description: 'Refresh chat commands' }
+];
+
+const PRIVATE_CHAT_ADMIN_COMMANDS = [
+  ...PUBLIC_COMMANDS,
+  ...ADMIN_COMMANDS,
+  { command: 'backup', description: 'Private chat backup' }
+];
+
+const ALL_ADMIN_COMMANDS = [...PUBLIC_COMMANDS, ...ADMIN_COMMANDS];
 
 export class RadarBot {
   constructor({ config, store, telegram, provider, alertEngine, backupManager }) {
@@ -61,7 +71,9 @@ export class RadarBot {
   }
 
   async start() {
-    await this.telegram.setMyCommands(COMMANDS);
+    this.botUser = await this.telegram.getMe();
+    await this.registerGlobalCommands();
+    await this.registerKnownChatCommands();
     console.log(`[ready] ${this.config.botName} polling Telegram updates.`);
 
     setInterval(() => {
@@ -78,7 +90,7 @@ export class RadarBot {
         const updates = await this.telegram.getUpdates({
           offset: this.store.data.meta.offset,
           timeout: this.config.pollTimeoutSeconds,
-          allowed_updates: ['message', 'channel_post', 'callback_query']
+          allowed_updates: ['message', 'channel_post', 'my_chat_member', 'callback_query']
         });
 
         for (const update of updates) {
@@ -100,6 +112,11 @@ export class RadarBot {
 
     if (update.channel_post) {
       await this.handleMessage(update.channel_post);
+      return;
+    }
+
+    if (update.my_chat_member) {
+      await this.handleMyChatMember(update.my_chat_member);
       return;
     }
 
@@ -149,9 +166,19 @@ export class RadarBot {
     const [rawCommand, ...args] = text.trim().split(/\s+/);
     const command = rawCommand.split('@')[0].toLowerCase();
 
+    if (isLooseBackupCommand(text)) {
+      await this.commandBackup(message);
+      return;
+    }
+
+    if (isLooseRestoreCommand(text)) {
+      await this.commandRestore(message);
+      return;
+    }
+
     switch (command) {
       case '/start':
-        await this.sendStart(message.chat.id);
+        await this.sendStart(message.chat.id, await this.shouldShowAdminControls(message));
         break;
       case '/watchtoken':
         await this.commandWatchToken(message, args);
@@ -192,6 +219,9 @@ export class RadarBot {
       case '/id':
         await this.commandId(message);
         break;
+      case '/commands':
+        await this.commandRefreshCommands(message);
+        break;
       case '/demoalert':
         if (this.config.enableDemoCommands) await this.commandDemoAlert(message);
         break;
@@ -209,7 +239,12 @@ export class RadarBot {
     this.store.ensureUser(callback.from, callback.message.chat.type === 'private' ? chatId : userId);
     await this.telegram.answerCallbackQuery(callback.id).catch(() => {});
 
-    if (data === 'menu:start') return this.editMenu(chatId, message.message_id);
+    if (data === 'menu:start') {
+      return this.editMenu(chatId, message.message_id, await this.shouldShowAdminControls({
+        chat: message.chat,
+        from: callback.from
+      }));
+    }
     if (data === 'menu:watchtoken') return this.telegram.sendMessage(chatId, usageMessage('/watchtoken CA', '/watchtoken So11111111111111111111111111111111111111112'));
     if (data === 'menu:watchwallet') return this.telegram.sendMessage(chatId, usageMessage('/watchwallet walletaddress', '/watchwallet 7fL4...wallet'));
     if (data === 'menu:new') return this.commandNewPairs(chatId);
@@ -232,12 +267,12 @@ export class RadarBot {
     return null;
   }
 
-  async sendStart(chatId) {
-    await this.telegram.sendMessage(chatId, mainMenuMessage(this.config), mainMenuKeyboard());
+  async sendStart(chatId, showAdmin = false) {
+    await this.telegram.sendMessage(chatId, mainMenuMessage(this.config), mainMenuKeyboard({ showAdmin }));
   }
 
-  async editMenu(chatId, messageId) {
-    await this.telegram.editMessageText(chatId, messageId, mainMenuMessage(this.config), mainMenuKeyboard());
+  async editMenu(chatId, messageId, showAdmin = false) {
+    await this.telegram.editMessageText(chatId, messageId, mainMenuMessage(this.config), mainMenuKeyboard({ showAdmin }));
   }
 
   async commandWatchToken(message, args) {
@@ -319,6 +354,16 @@ export class RadarBot {
     await this.telegram.sendMessage(chatId, marketReportMessage(report, this.config), reportKeyboard());
   }
 
+  async commandRefreshCommands(message) {
+    if (message.chat.type !== 'private' && !(await this.isMessageFromChatAdmin(message))) {
+      await this.telegram.sendMessage(message.chat.id, 'Only chat admins can refresh commands here.');
+      return;
+    }
+
+    const result = await this.registerChatCommands(message.chat);
+    await this.telegram.sendMessage(message.chat.id, result.message);
+  }
+
   async commandDemoAlert(message) {
     const ca = 'So11111111111111111111111111111111111111112';
     await this.alertEngine.routeEvent(this.provider.demoWalletAlert(ca));
@@ -329,14 +374,17 @@ export class RadarBot {
   async commandBackup(message) {
     const authorization = await this.canRunBackup(message);
     if (!authorization.ok) {
+      const reason = authorization.reason === 'public-chat'
+        ? 'Backups only work in private channels/groups. This chat is public, so no backup was created.'
+        : 'Backup is owner/private-admin only. Add the bot as admin in a private channel/group, or use an owner private chat.';
       await this.telegram.sendMessage(
         message.chat.id,
-        'Backup is owner/admin only. In a group or channel, any Telegram admin can run it. In private chat, set ADMIN_USER_IDS or BACKUP_CHAT_ID first.'
+        reason
       );
       return;
     }
 
-    const targetChatId = this.config.backupChatId || (message.chat.type === 'private' ? message.chat.id : '');
+    const targetChatId = this.config.backupChatId || message.chat.id;
     const result = await this.backupManager.sendBackup(`manual:${authorization.reason}`, {
       force: true,
       chatId: targetChatId
@@ -344,19 +392,12 @@ export class RadarBot {
     if (result.skipped) {
       await this.telegram.sendMessage(
         message.chat.id,
-        `${result.reason} Send /id to the bot in private chat, then set BACKUP_CHAT_ID to that private chat ID.`
+        `${result.reason} Add BACKUP_CHAT_ID if you want backups sent to a private DM instead.`
       );
       return;
     }
 
-    await this.telegram.sendMessage(
-      message.chat.id,
-      [
-        '✅ Backup sent to the private backup chat.',
-        `File: <code>${result.filename}</code>`,
-        `Size: <code>${result.bytes}</code> bytes`
-      ].join('\n')
-    );
+    console.log(`[backup] sent ${result.filename} to chat ${targetChatId}`);
   }
 
   async commandRestore(message) {
@@ -505,6 +546,96 @@ export class RadarBot {
     await this.telegram.sendMessage(message.chat.id, scanMessage(scan, this.config), actionButtons(this.config, ca));
   }
 
+  async handleMyChatMember(update) {
+    const chat = update.chat;
+    const status = update.new_chat_member?.status;
+
+    if (!chat || chat.type === 'private') return;
+    this.store.ensureGroup(chat);
+
+    if (['administrator', 'creator'].includes(status)) {
+      const result = await this.registerChatCommands(chat);
+      console.log(`[commands] ${chat.type}:${chat.id} ${result.status}`);
+    }
+  }
+
+  async registerGlobalCommands() {
+    const publicScopes = [
+      { type: 'default' },
+      { type: 'all_private_chats' },
+      { type: 'all_group_chats' }
+    ];
+
+    for (const scope of publicScopes) {
+      await this.telegram.setMyCommands(PUBLIC_COMMANDS, { scope }).catch((error) => {
+        console.warn(`[commands] global scope ${scope.type} failed: ${error.message}`);
+      });
+    }
+
+    await this.telegram.setMyCommands(ALL_ADMIN_COMMANDS, {
+      scope: { type: 'all_chat_administrators' }
+    }).catch((error) => {
+      console.warn(`[commands] global scope all_chat_administrators failed: ${error.message}`);
+    });
+  }
+
+  async registerKnownChatCommands() {
+    for (const group of Object.values(this.store.data.groups)) {
+      const chat = {
+        id: group.id,
+        type: group.type ?? 'supergroup',
+        title: group.title,
+        username: group.username
+      };
+
+      if (!(await this.botIsAdminInChat(chat.id))) continue;
+      const result = await this.registerChatCommands(chat);
+      console.log(`[commands] startup ${chat.type}:${chat.id} ${result.status}`);
+    }
+  }
+
+  async registerChatCommands(chat) {
+    if (chat.type === 'channel') {
+      return {
+        status: 'skipped-channel-scope',
+        message: 'Commands are globally registered, and channel /backup works when the bot is admin. Telegram does not support per-channel command menu scopes.'
+      };
+    }
+
+    try {
+      await this.telegram.setMyCommands(PUBLIC_COMMANDS, {
+        scope: {
+          type: 'chat',
+          chat_id: chat.id
+        }
+      });
+
+      const adminCommands = isPublicTelegramChat(chat) ? ALL_ADMIN_COMMANDS : PRIVATE_CHAT_ADMIN_COMMANDS;
+      await this.telegram.setMyCommands(adminCommands, {
+        scope: {
+          type: 'chat_administrators',
+          chat_id: chat.id
+        }
+      });
+
+      return {
+        status: 'registered',
+        message: 'Commands refreshed for this chat.'
+      };
+    } catch (error) {
+      console.warn(`[commands] chat ${chat.id} failed: ${error.message}`);
+      return {
+        status: 'failed',
+        message: `Command refresh failed: ${error.message}`
+      };
+    }
+  }
+
+  async botIsAdminInChat(chatId) {
+    if (!this.botUser?.id) return false;
+    return this.isGroupAdmin(chatId, this.botUser.id);
+  }
+
   async isGroupAdmin(chatId, userId) {
     if (!userId) return false;
 
@@ -538,11 +669,23 @@ export class RadarBot {
       return { ok: false, reason: 'not-authorized' };
     }
 
+    if (!this.config.backupAllowPublicChats && isPublicTelegramChat(message.chat)) {
+      return { ok: false, reason: 'public-chat' };
+    }
+
     if (await this.isMessageFromChatAdmin(message)) {
       return { ok: true, reason: `${message.chat.type}-admin` };
     }
 
     return { ok: false, reason: 'not-chat-admin' };
+  }
+
+  async shouldShowAdminControls(message) {
+    if (message.chat.type === 'private') {
+      return this.backupManager.isOwner(message.from?.id);
+    }
+
+    return this.isMessageFromChatAdmin(message);
   }
 
   stop() {
@@ -553,6 +696,10 @@ export class RadarBot {
 
 function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function isPublicTelegramChat(chat) {
+  return chat?.type !== 'private' && !!chat?.username;
 }
 
 function isLooseBackupCommand(text) {

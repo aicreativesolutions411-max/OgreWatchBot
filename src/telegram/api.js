@@ -1,8 +1,9 @@
 export class TelegramApi {
-  constructor(token) {
+  constructor(token, options = {}) {
     this.token = token;
     this.baseUrl = `https://api.telegram.org/bot${token}`;
     this.assetBaseUrl = `https://api.telegram.org/${'file'}/bot${token}`;
+    this.footerHtml = options.footerHtml ?? '';
   }
 
   async call(method, payload = {}) {
@@ -45,12 +46,13 @@ export class TelegramApi {
   }
 
   sendMessage(chatId, text, options = {}) {
+    const { disableFooter, ...telegramOptions } = options;
     return this.call('sendMessage', {
       chat_id: chatId,
-      text,
+      text: this.withFooter(text, { disableFooter }),
       parse_mode: 'HTML',
       disable_web_page_preview: true,
-      ...options
+      ...telegramOptions
     });
   }
 
@@ -66,13 +68,14 @@ export class TelegramApi {
   }
 
   editMessageText(chatId, messageId, text, options = {}) {
+    const { disableFooter, ...telegramOptions } = options;
     return this.call('editMessageText', {
       chat_id: chatId,
       message_id: messageId,
-      text,
+      text: this.withFooter(text, { disableFooter }),
       parse_mode: 'HTML',
       disable_web_page_preview: true,
-      ...options
+      ...telegramOptions
     });
   }
 
@@ -105,7 +108,13 @@ export class TelegramApi {
     return Buffer.from(await response.arrayBuffer());
   }
 
-  setMyCommands(commands) {
-    return this.call('setMyCommands', { commands });
+  setMyCommands(commands, options = {}) {
+    return this.call('setMyCommands', { commands, ...options });
+  }
+
+  withFooter(text, options = {}) {
+    if (options.disableFooter || !this.footerHtml) return text;
+    if (String(text).includes(this.footerHtml)) return text;
+    return `${text}\n\n${this.footerHtml}`;
   }
 }

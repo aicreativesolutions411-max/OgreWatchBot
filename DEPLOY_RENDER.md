@@ -1,6 +1,6 @@
 # Deploy on Render with Git
 
-This bot is designed to run as a Render Background Worker from a Git repo.
+This bot is designed to run as a Render Web Service from a Git repo.
 
 ## 1. Push to Git
 
@@ -26,15 +26,25 @@ Required secrets:
 
 ```text
 TELEGRAM_BOT_TOKEN=your_botfather_token
-BACKUP_CHAT_ID=your_private_telegram_user_id
-ADMIN_USER_IDS=your_private_telegram_user_id
+BACKUP_CHAT_ID=optional_private_telegram_user_id
+ADMIN_USER_IDS=optional_private_restore_owner_id
 ```
 
-Send `/id` to the bot in private chat to get your numeric ID. `ADMIN_USER_IDS` is still recommended for private `/restore`, but group/supergroup/channel admins can run `/backup` without being listed.
+Send `/id` to the bot in private chat to get your numeric ID if you want private DM backups or private `/restore`. Private group/supergroup/channel admins can run `/backup` without being listed. Public chats with a public `@username` are blocked from creating backups. If `BACKUP_CHAT_ID` is empty, `/backup` posts the backup file to the same private chat where the command was run.
 
-## 3. Why this uses a worker
+The Ogres social footer is included in `render.yaml`:
 
-Telegram long polling does not need public HTTP traffic. A Render Background Worker keeps the bot process alive and lets it poll Telegram continuously.
+```text
+SOCIAL_FOOTER_ENABLED=true
+SOCIAL_FOOTER_TITLE=Powered by Ogres
+SOCIAL_TELEGRAM_URL=https://t.me/ogrecoinonsol
+SOCIAL_WEBSITE_URL=https://ogremode.com/
+SOCIAL_TWITTER_URL=https://twitter.com/i/communities/1930265213917425858
+```
+
+## 3. Why this uses a web service
+
+Telegram long polling does not need public HTTP traffic, but Render Web Services require an open HTTP port. This bot opens a small health server on `0.0.0.0:$PORT`, so Render deploys cleanly and `/health` returns 200.
 
 The Blueprint also mounts a persistent disk:
 
@@ -44,15 +54,36 @@ The Blueprint also mounts a persistent disk:
 
 Telegram backups are still enabled because Render filesystems outside the disk are ephemeral, and backups give you an off-Render recovery copy in your private chat.
 
-## 4. Backup and restore
+## 4. User vs admin commands
 
-Owner-only commands:
+Public user commands are registered for everyone:
 
 ```text
-/backup
-/restore
+/start
+/watchtoken
+/watchwallet
+/new
+/trending
+/portfolio
+/myalerts
+/mywatchlist
+/report
+/help
 /id
 ```
+
+Admin commands are registered for chat admins where Telegram supports admin command scopes:
+
+```text
+/groupsettings
+/backup
+/commands
+/restore
+```
+
+In channels, Telegram does not support per-channel admin command menus, but admin commands still work when typed by a private-channel admin.
+
+## 5. Backup and restore
 
 To restore, send a backup JSON file to the bot in private chat with the caption:
 
@@ -62,7 +93,7 @@ To restore, send a backup JSON file to the bot in private chat with the caption:
 
 Before restoring, the bot tries to send a `pre-restore` backup to your backup chat.
 
-## 5. Message reading in groups/channels
+## 6. Message reading in groups/channels
 
 The bot listens for both normal messages and channel posts. It accepts:
 
@@ -81,15 +112,17 @@ BotFather -> your bot -> Bot Settings -> Group Privacy -> Turn off
 
 Slash commands like `/backup` are the most reliable option when privacy mode is on.
 
-## 6. Render keepalive
+The bot registers commands on startup and again when it receives Telegram's bot membership update after being added or promoted. Telegram command menu scopes work for private chats, groups, supergroups, and chat administrators. Private channels can still run `/backup`, but Telegram does not support per-channel command menu scopes. Public chats cannot create backups.
 
-The bot runs a keepalive heartbeat every 5 minutes by default:
+## 7. Render keepalive
+
+The bot runs a keepalive heartbeat every 10 minutes by default:
 
 ```text
-KEEPALIVE_INTERVAL_MINUTES=5
+KEEPALIVE_INTERVAL_MINUTES=10
 ```
 
-It calls Telegram `getMe` and logs success. If you later deploy as a Render Web Service instead of a Background Worker, set:
+It calls Telegram `getMe`, serves `/health`, and pings `KEEPALIVE_URL`. On Render Web Services, `KEEPALIVE_URL` automatically falls back to Render's `RENDER_EXTERNAL_URL`.
 
 ```text
 ENABLE_HEALTH_SERVER=true
