@@ -1,5 +1,5 @@
 import { ALERT_MODES, NEW_PAIR_DEFAULT_FILTERS, TOKEN_ALERT_OPTIONS, WALLET_ALERT_OPTIONS } from '../domain/defaults.js';
-import { compactAddress, escapeHtml, minutesAgo, percent, sol, usd } from '../utils/format.js';
+import { compactAddress, escapeHtml, linkFromTemplate, minutesAgo, percent, sol, usd } from '../utils/format.js';
 
 export function mainMenuMessage(config) {
   return [
@@ -48,70 +48,71 @@ export function alertPrefsMessage(user) {
   ].join('\n');
 }
 
-export function askTokenOptionsMessage(ca) {
+export function askTokenOptionsMessage(ca, config = {}) {
   return [
     '🛰 <b>Watch Token</b>',
     '',
-    `Token: <code>${escapeHtml(ca)}</code>`,
+    `Token: ${tokenAddressLink(ca, config)}`,
     '',
     'What do you want to know about this token?'
   ].join('\n');
 }
 
-export function tokenWatchedMessage(ca, mode) {
+export function tokenWatchedMessage(ca, mode, config = {}) {
   const label = TOKEN_ALERT_OPTIONS[mode] ?? ALERT_MODES[mode]?.label ?? mode;
   return [
     '✅ <b>Token Watch Added</b>',
     '',
-    `Token: <code>${escapeHtml(ca)}</code>`,
+    `Token: ${tokenAddressLink(ca, config)}`,
     `Mode: <b>${escapeHtml(label)}</b>`,
     '',
     'Important events will route to DM unless your alert mode is silent or digest-only.'
   ].join('\n');
 }
 
-export function askWalletOptionsMessage(wallet) {
+export function askWalletOptionsMessage(wallet, config = {}) {
   return [
     '🐋 <b>Watch Wallet</b>',
     '',
-    `Wallet: <code>${escapeHtml(wallet)}</code>`,
+    `Wallet: ${walletAddressLink(wallet, config)}`,
     '',
     'How should trades from this wallet be handled?'
   ].join('\n');
 }
 
-export function walletWatchedMessage(wallet, mode) {
+export function walletWatchedMessage(wallet, mode, config = {}) {
   const label = WALLET_ALERT_OPTIONS[mode] ?? ALERT_MODES[mode]?.label ?? mode;
   return [
     '✅ <b>Wallet Watch Added</b>',
     '',
-    `Wallet: <code>${escapeHtml(wallet)}</code>`,
+    `Wallet: ${walletAddressLink(wallet, config)}`,
     `Mode: <b>${escapeHtml(label)}</b>`,
     '',
     'Large trades, first buys, repeated buys, and multi-wallet activity are treated as important.'
   ].join('\n');
 }
 
-export function watchlistMessage(user) {
+export function watchlistMessage(user, config = {}) {
   const tokens = Object.keys(user.watchTokens);
   const wallets = Object.values(user.watchWallets);
 
   const lines = ['📌 <b>My Watchlist</b>', ''];
   lines.push('<b>Tokens</b>');
-  lines.push(tokens.length ? tokens.map((ca, index) => `${index + 1}. <code>${escapeHtml(compactAddress(ca, 6, 6))}</code> - ${escapeHtml(user.watchTokens[ca].mode)}`).join('\n') : 'None yet.');
+  lines.push(tokens.length ? tokens.map((ca, index) => `${index + 1}. ${tokenAddressLink(ca, config, 6, 6)} - ${escapeHtml(user.watchTokens[ca].mode)}`).join('\n') : 'None yet.');
   lines.push('');
   lines.push('<b>Wallets</b>');
-  lines.push(wallets.length ? wallets.map((watch, index) => `${index + 1}. ${escapeHtml(watch.label)} - <code>${escapeHtml(compactAddress(watch.wallet, 6, 6))}</code> - ${escapeHtml(watch.mode)}`).join('\n') : 'None yet.');
+  lines.push(wallets.length ? wallets.map((watch, index) => `${index + 1}. ${walletLink(watch.label, watch.wallet, config)} - ${walletAddressLink(watch.wallet, config, 6, 6)} - ${escapeHtml(watch.mode)}`).join('\n') : 'None yet.');
 
   return lines.join('\n');
 }
 
-export function groupSettingsMessage(group) {
+export function groupSettingsMessage(group, config = {}) {
   const s = group.settings;
+  const autoCaScan = config.enableAutoCaScan ? s.autoCaScan : false;
   return [
     '⚙️ <b>Group Alert Settings</b>',
     '',
-    `Auto CA Scan: <b>${onOff(s.autoCaScan)}</b>`,
+    `Auto CA Scan: <b>${onOff(autoCaScan)}</b>`,
     `New Pair Alerts: <b>${onOff(s.newPairAlerts)}</b>`,
     `Whale Alerts: <b>${onOff(s.whaleAlerts)}</b>`,
     `Trending Digest: <b>${onOff(s.trendingDigest)}</b>`,
@@ -124,7 +125,7 @@ export function groupSettingsMessage(group) {
 
 export function scanMessage(scan, config) {
   return [
-    `🔎 <b>${escapeHtml(scan.symbol)} Scan</b>`,
+    `🔎 <b>${tokenLink(scan.symbol, scan.ca, config)} Scan</b>`,
     '',
     `Market Cap: <b>${usd(scan.marketCapUsd)}</b>`,
     `Liquidity: <b>${usd(scan.liquidityUsd)}</b>`,
@@ -137,12 +138,12 @@ export function scanMessage(scan, config) {
   ].join('\n');
 }
 
-export function newPairsMessage(pairs, status = null) {
+export function newPairsMessage(pairs, config = {}, status = null) {
   const lines = ['🆕 <b>New Solana Pairs</b>', ''];
   lines.push(...marketStatusLines(status));
   if (status) lines.push('');
   pairs.forEach((pair, index) => {
-    lines.push(`${index + 1}. <b>${escapeHtml(pair.symbol)}</b> - ${minutesAgo(pair.ageMinutes)} - ${usd(pair.marketCapUsd)} MC - ${usd(pair.liquidityUsd)} liq`);
+    lines.push(`${index + 1}. <b>${tokenLink(pair.symbol, pair.ca, config)}</b> - ${minutesAgo(pair.ageMinutes)} - ${usd(pair.marketCapUsd)} MC - ${usd(pair.liquidityUsd)} liq`);
   });
   lines.push('');
   lines.push('Filters: liq over $10K, volume over $20K, market cap range.');
@@ -163,30 +164,30 @@ export function newPairFiltersMessage() {
   ].join('\n');
 }
 
-export function trendingMessage(tokens, label = 'Trending', status = null) {
+export function trendingMessage(tokens, label = 'Trending', config = {}, status = null) {
   const lines = [`🔥 <b>${escapeHtml(label)}</b>`, ''];
   lines.push(...marketStatusLines(status));
   if (status) lines.push('');
   tokens.forEach((token, index) => {
-    lines.push(`${index + 1}. <b>${escapeHtml(token.symbol)}</b> ${percent(token.movePercent)} - ${escapeHtml(token.reason)}`);
+    lines.push(`${index + 1}. <b>${tokenLink(token.symbol, token.ca, config)}</b> ${percent(token.movePercent)} - ${escapeHtml(token.reason)}`);
   });
   return lines.join('\n');
 }
 
-export function portfolioMessage(summary) {
+export function portfolioMessage(summary, config = {}) {
   return [
     '👛 <b>Wallet Summary</b>',
     '',
-    `Wallet: <code>${escapeHtml(compactAddress(summary.wallet, 8, 8))}</code>`,
+    `Wallet: ${walletAddressLink(summary.wallet, config, 8, 8)}`,
     `SOL balance: <b>${sol(summary.solBalance)}</b>`,
     `Tokens held: <b>${summary.tokensHeld}</b>`,
     `Estimated value: <b>${usd(summary.estimatedValueUsd)}</b>`,
     '',
     `Recent buys: <b>${summary.recentBuys}</b>`,
     `Recent sells: <b>${summary.recentSells}</b>`,
-    `Biggest current bag: <b>${escapeHtml(summary.biggestBag)}</b>`,
-    `Best recent trade: <b>${escapeHtml(summary.bestRecentTrade)}</b>`,
-    `Worst recent trade: <b>${escapeHtml(summary.worstRecentTrade)}</b>`
+    `Biggest current bag: <b>${tokenLink(summary.biggestBag, summary.biggestBagCa, config)}</b>`,
+    `Best recent trade: <b>${tradeText(summary.bestRecentTrade, summary.bestRecentTradeSymbol, summary.bestRecentTradeCa, config)}</b>`,
+    `Worst recent trade: <b>${tradeText(summary.worstRecentTrade, summary.worstRecentTradeSymbol, summary.worstRecentTradeCa, config)}</b>`
   ].join('\n');
 }
 
@@ -196,13 +197,52 @@ export function marketReportMessage(report, config, status = null) {
   if (status) lines.push('');
   lines.push('<b>Top watched tokens</b>');
   report.topTokens.forEach((token, index) => {
-    lines.push(`${index + 1}. <b>${escapeHtml(token.symbol)}</b> ${percent(token.movePercent)} - ${escapeHtml(token.reason)}`);
+    lines.push(`${index + 1}. <b>${tokenLink(token.symbol, token.ca, config)}</b> ${percent(token.movePercent)} - ${escapeHtml(token.reason)}`);
   });
   lines.push('');
   lines.push('<b>New pairs worth watching</b>');
   report.newPairs.forEach((pair, index) => {
-    lines.push(`${index + 1}. <b>${escapeHtml(pair.symbol)}</b> - ${usd(pair.liquidityUsd)} liq - ${minutesAgo(pair.ageMinutes)}`);
+    lines.push(`${index + 1}. <b>${tokenLink(pair.symbol, pair.ca, config)}</b> - ${usd(pair.liquidityUsd)} liq - ${minutesAgo(pair.ageMinutes)}`);
   });
+  return lines.join('\n');
+}
+
+export function hourlyGroupUpdateMessage(update, config, status = null) {
+  const lines = [`ðŸ›° <b>Hourly Radar Update by ${escapeHtml(config.brand)}</b>`, ''];
+  lines.push(...marketStatusLines(status));
+  if (status) lines.push('');
+
+  lines.push('<b>Trending coins</b>');
+  pushTokenRows(lines, update.trending, config, (token) => `${percent(token.movePercent)} - ${escapeHtml(token.reason)}`);
+  lines.push('');
+
+  lines.push('<b>Group tracked coins</b>');
+  if (update.trackedTokens?.length) {
+    update.trackedTokens.slice(0, 5).forEach((scan, index) => {
+      lines.push(`${index + 1}. <b>${tokenLink(scan.symbol, scan.ca, config)}</b> - ${usd(scan.marketCapUsd)} MC - ${usd(scan.liquidityUsd)} liq`);
+    });
+  } else {
+    lines.push('None tracked yet.');
+  }
+  lines.push('');
+
+  lines.push('<b>Wallet updates</b>');
+  if (update.trackedWallets?.length) {
+    update.trackedWallets.slice(0, 5).forEach((watch, index) => {
+      lines.push(`${index + 1}. ${walletLink(watch.label, watch.wallet, config)} - ${escapeHtml(watch.mode)} watch`);
+    });
+  } else {
+    lines.push('No tracked wallets yet.');
+  }
+  lines.push('');
+
+  lines.push('<b>New pairs</b>');
+  pushPairRows(lines, update.newPairs, config);
+  lines.push('');
+
+  lines.push('<b>High volume</b>');
+  pushTokenRows(lines, update.highVolume, config, (token) => escapeHtml(token.reason));
+
   return lines.join('\n');
 }
 
@@ -210,7 +250,7 @@ export function walletAlertMessage(alert, config) {
   return [
     '🐋 <b>Wallet Alert</b>',
     '',
-    `${escapeHtml(alert.walletLabel)} ${escapeHtml(alert.side)} <b>${escapeHtml(alert.symbol)}</b>`,
+    `${walletLink(alert.walletLabel, alert.wallet, config)} ${escapeHtml(alert.side)} <b>${tokenLink(alert.symbol, alert.ca, config)}</b>`,
     `Amount: <b>${sol(alert.solAmount)}</b>`,
     `Market Cap: <b>${usd(alert.marketCapUsd)}</b>`,
     `Liquidity: <b>${usd(alert.liquidityUsd)}</b>`,
@@ -221,7 +261,7 @@ export function walletAlertMessage(alert, config) {
 
 export function groupActivitySpikeMessage(alert, config) {
   return [
-    `🚨 <b>${escapeHtml(alert.symbol)} Activity Spike</b>`,
+    `🚨 <b>${tokenLink(alert.symbol, alert.ca, config)} Activity Spike</b>`,
     '',
     `${alert.walletCount} watched wallets bought in ${alert.timeframeMinutes} minutes`,
     `Total: <b>${sol(alert.totalSol)}</b>`,
@@ -232,7 +272,7 @@ export function groupActivitySpikeMessage(alert, config) {
 
 export function tokenMilestoneMessage(alert, config) {
   return [
-    `📈 <b>${escapeHtml(alert.symbol)} Milestone</b>`,
+    `📈 <b>${tokenLink(alert.symbol, alert.ca, config)} Milestone</b>`,
     '',
     `Market Cap hit <b>${usd(alert.marketCapUsd)}</b>`,
     `Move: <b>${percent(alert.movePercent)}</b> in ${alert.window}`,
@@ -245,7 +285,7 @@ export function liquidityAlertMessage(alert, config) {
   return [
     `⚠️ <b>Liquidity Alert</b>`,
     '',
-    `<b>${escapeHtml(alert.symbol)}</b> liquidity changed`,
+    `<b>${tokenLink(alert.symbol, alert.ca, config)}</b> liquidity changed`,
     `Before: <b>${usd(alert.beforeUsd)}</b>`,
     `Now: <b>${usd(alert.afterUsd)}</b>`,
     `Change: <b>${percent(alert.changePercent)}</b>`,
@@ -255,7 +295,7 @@ export function liquidityAlertMessage(alert, config) {
 export function digestMessage(alerts, config) {
   const lines = [`🛰 <b>${escapeHtml(config.botName)} Summary</b>`, ''];
   alerts.slice(0, 10).forEach((alert, index) => {
-    lines.push(`${index + 1}. <b>${escapeHtml(alert.title)}</b> - ${escapeHtml(alert.summary)}`);
+    lines.push(`${index + 1}. <b>${linkKnownEntities(alert.title, config, alert)}</b> - ${linkKnownEntities(alert.summary, config, alert)}`);
   });
   if (alerts.length > 10) lines.push(`...and ${alerts.length - 10} more.`);
   return lines.join('\n');
@@ -283,11 +323,120 @@ function numberOrUnknown(value) {
   return number.toLocaleString('en-US');
 }
 
+function pushTokenRows(lines, tokens = [], config = {}, detailBuilder = () => '') {
+  if (!tokens.length) {
+    lines.push('None yet.');
+    return;
+  }
+
+  tokens.slice(0, 5).forEach((token, index) => {
+    const detail = detailBuilder(token);
+    lines.push(`${index + 1}. <b>${tokenLink(token.symbol, token.ca, config)}</b>${detail ? ` - ${detail}` : ''}`);
+  });
+}
+
+function pushPairRows(lines, pairs = [], config = {}) {
+  if (!pairs.length) {
+    lines.push('None yet.');
+    return;
+  }
+
+  pairs.slice(0, 5).forEach((pair, index) => {
+    lines.push(`${index + 1}. <b>${tokenLink(pair.symbol, pair.ca, config)}</b> - ${minutesAgo(pair.ageMinutes)} - ${usd(pair.liquidityUsd)} liq`);
+  });
+}
+
 function marketStatusLines(status) {
   if (!status) return [];
   const lines = [`Data: <b>${escapeHtml(status.source ?? 'Market')}</b> - updated <b>${escapeHtml(ageLabel(status.refreshedAt))}</b>`];
   if (status.error) lines.push(`Last refresh error: <code>${escapeHtml(status.error)}</code>`);
   return lines;
+}
+
+function tradeText(text, symbol, ca, config = {}) {
+  return linkKnownEntities(text, config, {
+    ca,
+    symbol
+  });
+}
+
+function linkKnownEntities(text, config = {}, entity = {}) {
+  let output = escapeHtml(text);
+  if (!output) return output;
+
+  if (entity.wallet) {
+    output = replaceLiteral(output, entity.wallet, walletAddressLink(entity.wallet, config, 8, 8));
+    output = replaceLiteral(output, compactAddress(entity.wallet, 8, 8), walletAddressLink(entity.wallet, config, 8, 8));
+    output = replaceLiteral(output, compactAddress(entity.wallet, 6, 6), walletAddressLink(entity.wallet, config, 6, 6));
+  }
+
+  if (entity.ca) {
+    output = replaceLiteral(output, entity.ca, tokenAddressLink(entity.ca, config, 8, 8));
+    output = replaceLiteral(output, compactAddress(entity.ca, 8, 8), tokenAddressLink(entity.ca, config, 8, 8));
+    output = replaceLiteral(output, compactAddress(entity.ca, 6, 6), tokenAddressLink(entity.ca, config, 6, 6));
+  }
+
+  if (entity.wallet && entity.walletLabel) {
+    output = replaceLiteral(output, entity.walletLabel, walletLink(entity.walletLabel, entity.wallet, config));
+  }
+
+  if (entity.ca && entity.symbol) {
+    output = replaceLiteral(output, entity.symbol, tokenLink(entity.symbol, entity.ca, config));
+  }
+
+  return output;
+}
+
+function tokenLink(symbol, ca, config = {}) {
+  const label = tokenLabel(symbol);
+  const url = tokenUrl(ca, config);
+  if (!url) return label;
+  return `<a href="${escapeHtml(url)}">${label}</a>`;
+}
+
+function tokenAddressLink(ca, config = {}, head = 8, tail = 8) {
+  const label = escapeHtml(compactAddress(ca, head, tail));
+  const url = tokenUrl(ca, config);
+  if (!url) return `<code>${label}</code>`;
+  return `<a href="${escapeHtml(url)}">${label}</a>`;
+}
+
+function tokenLabel(symbol) {
+  const text = String(symbol ?? '').trim();
+  if (!text) return 'Unknown';
+  return escapeHtml(text.startsWith('$') ? text : `$${text}`);
+}
+
+function walletLink(label, wallet, config = {}) {
+  const text = escapeHtml(label || compactAddress(wallet, 6, 6));
+  const url = walletUrl(wallet, config);
+  if (!url) return text;
+  return `<a href="${escapeHtml(url)}">${text}</a>`;
+}
+
+function walletAddressLink(wallet, config = {}, head = 8, tail = 8) {
+  const label = escapeHtml(compactAddress(wallet, head, tail));
+  const url = walletUrl(wallet, config);
+  if (!url) return `<code>${label}</code>`;
+  return `<a href="${escapeHtml(url)}">${label}</a>`;
+}
+
+function tokenUrl(ca, config = {}) {
+  if (!ca) return '';
+  const template = config.chartUrlTemplate || config.scanUrlTemplate || 'https://dexscreener.com/solana/{ca}';
+  return linkFromTemplate(template, ca);
+}
+
+function walletUrl(wallet, config = {}) {
+  if (!wallet) return '';
+  const template = config.walletUrlTemplate || 'https://solscan.io/account/{wallet}';
+  return template.replaceAll('{wallet}', encodeURIComponent(wallet));
+}
+
+function replaceLiteral(value, target, replacement) {
+  const escapedTarget = escapeHtml(target);
+  if (!escapedTarget || !replacement) return value;
+  return value.replaceAll(escapedTarget, replacement);
 }
 
 function ageLabel(value) {

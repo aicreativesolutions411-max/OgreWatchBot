@@ -31,7 +31,7 @@ export const DEFAULT_USER_SETTINGS = {
 };
 
 export const DEFAULT_GROUP_SETTINGS = {
-  autoCaScan: true,
+  autoCaScan: false,
   newPairAlerts: false,
   whaleAlerts: false,
   trendingDigest: true,

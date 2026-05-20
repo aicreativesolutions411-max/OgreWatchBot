@@ -9,7 +9,9 @@ const EMPTY_DATA = {
     offset: 0,
     lastGroupDigestAt: {},
     lastUserDigestAt: {},
-    lastDailyReportAt: {}
+    lastDailyReportAt: {},
+    chatMessageCounts: {},
+    chatActionGates: {}
   },
   users: {},
   groups: {},
@@ -84,6 +86,30 @@ export class JsonStore {
 
   setOffset(offset) {
     this.data.meta.offset = offset;
+    this.save();
+  }
+
+  incrementChatMessageCount(chatId) {
+    const id = String(chatId);
+    this.data.meta.chatMessageCounts ??= {};
+    this.data.meta.chatMessageCounts[id] = (this.data.meta.chatMessageCounts[id] ?? 0) + 1;
+    this.save();
+    return this.data.meta.chatMessageCounts[id];
+  }
+
+  getChatMessageCount(chatId) {
+    this.data.meta.chatMessageCounts ??= {};
+    return this.data.meta.chatMessageCounts[String(chatId)] ?? 0;
+  }
+
+  getChatActionGate(chatId, actionKey) {
+    this.data.meta.chatActionGates ??= {};
+    return this.data.meta.chatActionGates[`${chatId}:${actionKey}`];
+  }
+
+  setChatActionGate(chatId, actionKey, messageCount) {
+    this.data.meta.chatActionGates ??= {};
+    this.data.meta.chatActionGates[`${chatId}:${actionKey}`] = messageCount;
     this.save();
   }
 
@@ -240,6 +266,39 @@ export class JsonStore {
     group.updatedAt = nowIso();
     this.save();
     return group;
+  }
+
+  addGroupTokenWatch(chatId, ca, options = {}) {
+    const group = this.getGroup(chatId);
+    if (!group) return null;
+
+    group.watchTokens ??= {};
+    group.watchTokens[ca] = {
+      ca,
+      mode: options.mode ?? 'important',
+      createdAt: group.watchTokens[ca]?.createdAt ?? nowIso(),
+      updatedAt: nowIso()
+    };
+    group.updatedAt = nowIso();
+    this.save();
+    return group.watchTokens[ca];
+  }
+
+  addGroupWalletWatch(chatId, wallet, options = {}) {
+    const group = this.getGroup(chatId);
+    if (!group) return null;
+
+    group.watchWallets ??= {};
+    group.watchWallets[wallet] = {
+      wallet,
+      label: options.label ?? group.watchWallets[wallet]?.label ?? 'Watched Wallet',
+      mode: options.mode ?? 'important',
+      createdAt: group.watchWallets[wallet]?.createdAt ?? nowIso(),
+      updatedAt: nowIso()
+    };
+    group.updatedAt = nowIso();
+    this.save();
+    return group.watchWallets[wallet];
   }
 
   queueUserAlert(userId, alert) {

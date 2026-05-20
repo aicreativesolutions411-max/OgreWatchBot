@@ -69,6 +69,13 @@ export class MockSolanaProvider {
   }
 
   async getPortfolio(wallet) {
+    const biggestBagCa = SAMPLE_CONTRACTS[seededNumber(`${wallet}:bagidx`, 0, SAMPLE_CONTRACTS.length - 1)];
+    const bestRecentTradeCa = SAMPLE_CONTRACTS[seededNumber(`${wallet}:bestidx`, 0, SAMPLE_CONTRACTS.length - 1)];
+    const worstRecentTradeCa = SAMPLE_CONTRACTS[seededNumber(`${wallet}:worstidx`, 0, SAMPLE_CONTRACTS.length - 1)];
+    const biggestBag = tokenSymbolFromAddress(biggestBagCa);
+    const bestRecentTradeSymbol = tokenSymbolFromAddress(bestRecentTradeCa);
+    const worstRecentTradeSymbol = tokenSymbolFromAddress(worstRecentTradeCa);
+
     return {
       wallet,
       solBalance: seededNumber(`${wallet}:sol`, 1, 140) / 10,
@@ -76,9 +83,14 @@ export class MockSolanaProvider {
       estimatedValueUsd: seededNumber(`${wallet}:value`, 420, 41_000),
       recentBuys: seededNumber(`${wallet}:buys`, 0, 9),
       recentSells: seededNumber(`${wallet}:sells`, 0, 7),
-      biggestBag: tokenSymbolFromAddress(`${wallet}:bag`),
-      bestRecentTrade: `${tokenSymbolFromAddress(`${wallet}:best`)} +${seededNumber(`${wallet}:bestpct`, 18, 164)}%`,
-      worstRecentTrade: `${tokenSymbolFromAddress(`${wallet}:worst`)} -${seededNumber(`${wallet}:worstpct`, 8, 51)}%`
+      biggestBag,
+      biggestBagCa,
+      bestRecentTradeSymbol,
+      bestRecentTradeCa,
+      bestRecentTrade: `${bestRecentTradeSymbol} +${seededNumber(`${wallet}:bestpct`, 18, 164)}%`,
+      worstRecentTradeSymbol,
+      worstRecentTradeCa,
+      worstRecentTrade: `${worstRecentTradeSymbol} -${seededNumber(`${wallet}:worstpct`, 8, 51)}%`
     };
   }
 

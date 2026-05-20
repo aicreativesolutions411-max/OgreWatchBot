@@ -58,6 +58,13 @@ const PRIVATE_CHAT_ADMIN_COMMANDS = [
 ];
 
 const ALL_ADMIN_COMMANDS = [...PUBLIC_COMMANDS, ...ADMIN_COMMANDS];
+const KNOWN_COMMANDS = new Set([
+  ...PUBLIC_COMMANDS.map((item) => `/${item.command}`),
+  ...ADMIN_COMMANDS.map((item) => `/${item.command}`),
+  '/backup',
+  '/restore',
+  '/demoalert'
+]);
 
 export class RadarBot {
   constructor({ config, store, telegram, provider, alertEngine, backupManager }) {
@@ -159,7 +166,7 @@ export class RadarBot {
       await this.registerChatCommandsOnce(chat);
     }
 
-    if (message.document && isLooseRestoreCommand(text)) {
+    if (message.document && isStrictCommand(text, '/restore')) {
       await this.commandRestore(message);
       return;
     }
@@ -173,17 +180,8 @@ export class RadarBot {
       return;
     }
 
-    if (isLooseBackupCommand(text)) {
-      await this.commandBackup(message);
-      return;
-    }
-
-    if (isLooseRestoreCommand(text)) {
-      await this.commandRestore(message);
-      return;
-    }
-
     if (chat.type !== 'private') {
+      if (!options.edited) this.store.incrementChatMessageCount(chat.id);
       await this.handleGroupAutoScan(message);
     }
   }
@@ -202,23 +200,32 @@ export class RadarBot {
   }
 
   async handleLooseTextCommand(message, text) {
-    const command = looseTextCommand(text);
-    if (!command) return false;
-
-    await this.handleCommand(message, `/${command}`);
-    return true;
+    void message;
+    void text;
+    return false;
   }
 
   async handleCommand(message, text) {
     const [rawCommand, ...args] = text.trim().split(/\s+/);
     const command = rawCommand.split('@')[0].toLowerCase();
 
-    if (isLooseBackupCommand(text)) {
+    if (!this.isKnownCommand(command)) {
+      console.log(`[command] ignored unknown command ${command} in ${message.chat.type}:${message.chat.id}`);
+      return;
+    }
+
+    const actionGate = this.chatActionGate(message.chat, commandActionKey(command, args));
+    if (!actionGate.allowed) {
+      console.log(`[gate] ${message.chat.type}:${message.chat.id} ${command} waiting ${actionGate.remaining} messages`);
+      return;
+    }
+
+    if (command === '/backup') {
       await this.commandBackup(message);
       return;
     }
 
-    if (isLooseRestoreCommand(text)) {
+    if (command === '/restore') {
       await this.commandRestore(message);
       return;
     }
@@ -276,7 +283,7 @@ export class RadarBot {
         if (this.config.enableDemoCommands) await this.commandDemoAlert(message);
         break;
       default:
-        await this.telegram.sendMessage(message.chat.id, helpMessage(this.config));
+        console.log(`[command] ${command} is registered but disabled in ${message.chat.type}:${message.chat.id}`);
     }
   }
 
@@ -287,6 +294,15 @@ export class RadarBot {
     const userId = callback.from.id;
 
     this.store.ensureUser(callback.from, callback.message.chat.type === 'private' ? chatId : userId);
+    const actionGate = this.chatActionGate(message.chat, callbackActionKey(data));
+    if (!actionGate.allowed) {
+      await this.telegram.answerCallbackQuery(callback.id, {
+        text: `Wait for ${actionGate.remaining} more chat messages before repeating this.`,
+        show_alert: false
+      }).catch(() => {});
+      return null;
+    }
+
     await this.telegram.answerCallbackQuery(callback.id).catch(() => {});
 
     if (data === 'menu:start') {
@@ -305,9 +321,9 @@ export class RadarBot {
     if (data === 'menu:report') return this.commandReport(chatId);
 
     if (data.startsWith('alertmode:')) return this.callbackAlertMode(chatId, message.message_id, userId, data);
-    if (data.startsWith('wt:')) return this.callbackWatchToken(chatId, userId, data);
-    if (data.startsWith('ww:')) return this.callbackWatchWallet(chatId, userId, data);
-    if (data.startsWith('qw:')) return this.callbackQuickWatch(chatId, userId, data);
+    if (data.startsWith('wt:')) return this.callbackWatchToken(message.chat, userId, data);
+    if (data.startsWith('ww:')) return this.callbackWatchWallet(message.chat, userId, data);
+    if (data.startsWith('qw:')) return this.callbackQuickWatch(message.chat, userId, data);
     if (data.startsWith('mt:')) return this.callbackMuteToken(chatId, userId, data);
     if (data.startsWith('portfolio:')) return this.commandPortfolio(chatId, [data.split(':')[1]]);
     if (data.startsWith('new:')) return this.callbackNewPairs(chatId, data);
@@ -332,7 +348,7 @@ export class RadarBot {
       return;
     }
 
-    await this.telegram.sendMessage(message.chat.id, askTokenOptionsMessage(ca), tokenOptionsKeyboard(ca));
+    await this.telegram.sendMessage(message.chat.id, askTokenOptionsMessage(ca, this.config), tokenOptionsKeyboard(ca));
   }
 
   async commandWatchWallet(message, args) {
@@ -342,17 +358,17 @@ export class RadarBot {
       return;
     }
 
-    await this.telegram.sendMessage(message.chat.id, askWalletOptionsMessage(wallet), walletOptionsKeyboard(wallet));
+    await this.telegram.sendMessage(message.chat.id, askWalletOptionsMessage(wallet, this.config), walletOptionsKeyboard(wallet));
   }
 
   async commandNewPairs(chatId) {
     const pairs = await this.provider.getNewPairs(NEW_PAIR_DEFAULT_FILTERS);
-    await this.telegram.sendMessage(chatId, newPairsMessage(pairs, this.provider.marketStatus?.()), newPairsKeyboard());
+    await this.telegram.sendMessage(chatId, newPairsMessage(pairs, this.config, this.provider.marketStatus?.()), newPairsKeyboard());
   }
 
   async commandTrending(chatId, kind) {
     const trending = await this.provider.getTrending(kind);
-    await this.telegram.sendMessage(chatId, trendingMessage(trending.tokens, trending.label, this.provider.marketStatus?.()), trendingKeyboard());
+    await this.telegram.sendMessage(chatId, trendingMessage(trending.tokens, trending.label, this.config, this.provider.marketStatus?.()), trendingKeyboard());
   }
 
   async commandPortfolio(chatId, args) {
@@ -363,7 +379,7 @@ export class RadarBot {
     }
 
     const summary = await this.provider.getPortfolio(wallet);
-    await this.telegram.sendMessage(chatId, portfolioMessage(summary), {
+    await this.telegram.sendMessage(chatId, portfolioMessage(summary, this.config), {
       reply_markup: {
         inline_keyboard: [
           [{ text: 'Track Wallet', callback_data: `ww:${wallet}:important` }, { text: 'Set Alerts', callback_data: 'menu:alerts' }],
@@ -380,7 +396,7 @@ export class RadarBot {
 
   async commandMyWatchlist(message) {
     const user = this.store.ensureUser(message.from, message.chat.id);
-    await this.telegram.sendMessage(message.chat.id, watchlistMessage(user));
+    await this.telegram.sendMessage(message.chat.id, watchlistMessage(user, this.config));
   }
 
   async commandGroupSettings(message) {
@@ -396,7 +412,7 @@ export class RadarBot {
     }
 
     const group = this.store.ensureGroup(message.chat);
-    await this.telegram.sendMessage(message.chat.id, groupSettingsMessage(group), groupSettingsKeyboard(group));
+    await this.telegram.sendMessage(message.chat.id, groupSettingsMessage(group, this.config), groupSettingsKeyboard(group));
   }
 
   async commandReport(chatId) {
@@ -519,28 +535,37 @@ export class RadarBot {
     await this.telegram.editMessageText(chatId, messageId, alertPrefsMessage(user), alertPrefsKeyboard(user.settings.alertMode));
   }
 
-  async callbackWatchToken(chatId, userId, data) {
+  async callbackWatchToken(chat, userId, data) {
     const [, ca, mode] = data.split(':');
     this.store.addUserTokenWatch(userId, ca, {
       mode,
       types: mode === 'silent' ? [] : [mode]
     });
-    await this.telegram.sendMessage(chatId, tokenWatchedMessage(ca, mode), actionButtons(this.config, ca, { watch: false }));
+    if (chat.type !== 'private') {
+      this.store.addGroupTokenWatch(chat.id, ca, { mode });
+    }
+    await this.telegram.sendMessage(chat.id, tokenWatchedMessage(ca, mode, this.config), actionButtons(this.config, ca, { watch: false }));
   }
 
-  async callbackWatchWallet(chatId, userId, data) {
+  async callbackWatchWallet(chat, userId, data) {
     const [, wallet, mode] = data.split(':');
     this.store.addUserWalletWatch(userId, wallet, {
       mode,
       label: 'Watched Wallet'
     });
-    await this.telegram.sendMessage(chatId, walletWatchedMessage(wallet, mode));
+    if (chat.type !== 'private') {
+      this.store.addGroupWalletWatch(chat.id, wallet, { mode, label: 'Watched Wallet' });
+    }
+    await this.telegram.sendMessage(chat.id, walletWatchedMessage(wallet, mode, this.config));
   }
 
-  async callbackQuickWatch(chatId, userId, data) {
+  async callbackQuickWatch(chat, userId, data) {
     const ca = data.split(':')[1];
     this.store.addUserTokenWatch(userId, ca, { mode: 'important', types: ['important'] });
-    await this.telegram.sendMessage(chatId, tokenWatchedMessage(ca, 'important'), actionButtons(this.config, ca, { watch: false }));
+    if (chat.type !== 'private') {
+      this.store.addGroupTokenWatch(chat.id, ca, { mode: 'important' });
+    }
+    await this.telegram.sendMessage(chat.id, tokenWatchedMessage(ca, 'important', this.config), actionButtons(this.config, ca, { watch: false }));
   }
 
   async callbackMuteToken(chatId, userId, data) {
@@ -588,12 +613,13 @@ export class RadarBot {
     await this.telegram.editMessageText(
       message.chat.id,
       message.message_id,
-      groupSettingsMessage(group),
+      groupSettingsMessage(group, this.config),
       groupSettingsKeyboard(group)
     );
   }
 
   async handleGroupAutoScan(message) {
+    if (!this.config.enableAutoCaScan) return;
     const group = this.store.ensureGroup(message.chat);
     if (!group.settings.autoCaScan) return;
 
@@ -605,6 +631,30 @@ export class RadarBot {
 
     const scan = await this.provider.scanToken(ca);
     await this.telegram.sendMessage(message.chat.id, scanMessage(scan, this.config), actionButtons(this.config, ca));
+  }
+
+  isKnownCommand(command) {
+    if (command === '/demoalert' && !this.config.enableDemoCommands) return false;
+    return KNOWN_COMMANDS.has(command);
+  }
+
+  chatActionGate(chat, actionKey) {
+    if (!chat || chat.type === 'private' || this.config.commandGateMessages <= 0) {
+      return { allowed: true, remaining: 0 };
+    }
+
+    const currentCount = this.store.getChatMessageCount(chat.id);
+    const lastCount = this.store.getChatActionGate(chat.id, actionKey);
+    const gap = currentCount - (lastCount ?? 0);
+    if (lastCount != null && gap < this.config.commandGateMessages) {
+      return {
+        allowed: false,
+        remaining: this.config.commandGateMessages - gap
+      };
+    }
+
+    this.store.setChatActionGate(chat.id, actionKey, currentCount);
+    return { allowed: true, remaining: 0 };
   }
 
   async handleMyChatMember(update) {
@@ -837,6 +887,50 @@ function isLooseBackupCommand(text) {
 
 function isLooseBotCommand(normalized) {
   return Boolean(looseTextCommand(normalized));
+}
+
+function isStrictCommand(text, expectedCommand) {
+  const [rawCommand] = String(text ?? '').trim().split(/\s+/);
+  const command = rawCommand.split('@')[0].toLowerCase();
+  return command === expectedCommand;
+}
+
+function commandActionKey(command, args = []) {
+  const firstArg = args[0] ?? '';
+  const secondArg = args[1] ?? '';
+  const keys = {
+    '/start': 'menu:start',
+    '/new': 'market:new',
+    '/trending': 'market:trending:5m',
+    '/report': 'market:report',
+    '/myalerts': 'menu:alerts',
+    '/mywatchlist': 'menu:watchlist',
+    '/groupsettings': 'group:settings',
+    '/commands': 'group:commands',
+    '/help': 'help',
+    '/id': 'id',
+    '/ping': 'ping',
+    '/backup': 'backup',
+    '/restore': 'restore'
+  };
+
+  if (command === '/portfolio') return `portfolio:${firstArg}`;
+  if (command === '/watchtoken') return `watchtoken:${firstArg}:${secondArg}`;
+  if (command === '/watchwallet') return `watchwallet:${firstArg}:${secondArg}`;
+  return keys[command] ?? `command:${command}:${args.slice(0, 2).join(':')}`;
+}
+
+function callbackActionKey(data = '') {
+  if (data === 'menu:start') return 'menu:start';
+  if (data === 'menu:new' || data.startsWith('new:')) return data === 'new:filters' ? 'market:new:filters' : 'market:new';
+  if (data === 'menu:trending') return 'market:trending:5m';
+  if (data.startsWith('trending:')) return `market:trending:${data.split(':')[1] ?? '5m'}`;
+  if (data === 'menu:report') return 'market:report';
+  if (data === 'menu:alerts') return 'menu:alerts';
+  if (data === 'menu:watchlist') return 'menu:watchlist';
+  if (data === 'menu:groupsettings') return 'group:settings';
+  if (data.startsWith('portfolio:')) return `portfolio:${data.split(':')[1] ?? ''}`;
+  return `callback:${data}`;
 }
 
 function looseTextCommand(text) {

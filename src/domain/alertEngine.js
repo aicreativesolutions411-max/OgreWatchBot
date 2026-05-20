@@ -3,8 +3,8 @@ import { actionButtons, reportKeyboard } from '../ui/keyboards.js';
 import {
   digestMessage,
   groupActivitySpikeMessage,
+  hourlyGroupUpdateMessage,
   liquidityAlertMessage,
-  marketReportMessage,
   tokenMilestoneMessage,
   walletAlertMessage
 } from '../ui/messages.js';
@@ -57,12 +57,17 @@ export class AlertEngine {
         summary: `${alert.solAmount} SOL at ${alert.marketCapUsd} MC`,
         importance: alert.importance ?? 'important',
         ca: alert.ca,
+        symbol: alert.symbol,
+        wallet: alert.wallet,
+        walletLabel: alert.walletLabel,
         text: walletAlertMessage(alert, this.config)
       });
     }
   }
 
   async routeGroupSpike(alert) {
+    if (!this.config.enableImmediateGroupAlerts) return;
+
     for (const group of Object.values(this.store.data.groups)) {
       if (!group.settings.whaleAlerts) continue;
       if (this.antiSpam.isQuietNow(group.settings)) continue;
@@ -87,9 +92,12 @@ export class AlertEngine {
         summary: `${alert.movePercent}% move to ${alert.marketCapUsd} MC`,
         importance: 'important',
         ca: alert.ca,
+        symbol: alert.symbol,
         text: tokenMilestoneMessage(alert, this.config)
       });
     }
+
+    if (!this.config.enableImmediateGroupAlerts) return;
 
     for (const group of Object.values(this.store.data.groups)) {
       if (this.antiSpam.isQuietNow(group.settings)) continue;
@@ -113,6 +121,7 @@ export class AlertEngine {
         summary: `${alert.changePercent}% liquidity move`,
         importance: 'important',
         ca: alert.ca,
+        symbol: alert.symbol,
         text: liquidityAlertMessage(alert, this.config)
       });
     }
@@ -163,15 +172,45 @@ export class AlertEngine {
       const lastSent = this.store.data.meta.lastGroupDigestAt[group.id] ?? 0;
       if (now - lastSent < intervalMs) continue;
 
-      const report = await this.provider.getMarketReport();
+      const update = await this.buildHourlyGroupUpdate(group);
       await this.telegram.sendMessage(
         group.id,
-        marketReportMessage(report, this.config, this.provider.marketStatus?.()),
+        hourlyGroupUpdateMessage(update, this.config, this.provider.marketStatus?.()),
         reportKeyboard()
       );
       this.store.data.meta.lastGroupDigestAt[group.id] = now;
       this.store.save();
     }
+  }
+
+  async buildHourlyGroupUpdate(group) {
+    const [trending, highVolume, newPairs, trackedTokens] = await Promise.all([
+      this.provider.getTrending('5m'),
+      this.provider.getTrending('24h'),
+      this.provider.getNewPairs(),
+      this.scanTrackedGroupTokens(group)
+    ]);
+
+    return {
+      trending: trending.tokens.slice(0, 5),
+      highVolume: highVolume.tokens.slice(0, 5),
+      newPairs: newPairs.slice(0, 5),
+      trackedTokens,
+      trackedWallets: Object.values(group.watchWallets ?? {}).slice(0, 5)
+    };
+  }
+
+  async scanTrackedGroupTokens(group) {
+    const tokenCas = Object.keys(group.watchTokens ?? {}).slice(0, 5);
+    const scans = [];
+    for (const ca of tokenCas) {
+      try {
+        scans.push(await this.provider.scanToken(ca));
+      } catch (error) {
+        console.warn(`[group-digest-scan] ${ca} ${error.message}`);
+      }
+    }
+    return scans;
   }
 
   async runUserDigests() {

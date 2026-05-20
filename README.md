@@ -55,6 +55,15 @@ SOCIAL_TWITTER_URL=https://twitter.com/i/communities/1930265213917425858
 
 Set `SOCIAL_FOOTER_ENABLED=false` to turn it off.
 
+## Link Templates
+
+Ticker text links to DexScreener by default, and wallet text links to Solscan:
+
+```text
+CHART_URL_TEMPLATE=https://dexscreener.com/solana/{ca}
+WALLET_URL_TEMPLATE=https://solscan.io/account/{wallet}
+```
+
 ## Private Telegram Backups
 
 Send `/id` to the bot in a private DM. Use that numeric ID for:
@@ -107,6 +116,18 @@ DEXSCREENER_SEARCH_QUERIES=SOL/USDC,SOL,pump,raydium
 ```
 
 The bot refreshes DEX Screener data silently in the background every minute. It does not post each refresh. Commands like `/new`, `/trending`, `/report`, and token scans read from the latest cache and show a data freshness line. If the API is temporarily unavailable, the bot keeps running and falls back to mock data instead of hanging commands.
+
+Group command/button spam is gated by message flow:
+
+```text
+COMMAND_GATE_MESSAGES=10
+ENABLE_AUTO_CA_SCAN=false
+ENABLE_IMMEDIATE_GROUP_ALERTS=false
+```
+
+In groups and channels, repeating the same command or button will not post again until 10 new chat messages have appeared. DMs are not gated. The bot does not auto-scan posted contracts by default; users must click or send commands. The only proactive group post is the hourly digest.
+
+Commands must be typed in full. Partial commands such as `/w` are ignored silently and do not post the help menu. Plain words like `new`, `ping`, or `backup` do not trigger group/channel replies; users must send the exact slash command, for example `/new`, or click a button.
 
 ## User Commands
 
@@ -185,7 +206,7 @@ User default: `Important Only`
 
 Group default:
 
-- Auto CA Scan: ON
+- Auto CA Scan: OFF
 - New Pair Alerts: OFF
 - Whale Alerts: OFF
 - Trending Digest: ON

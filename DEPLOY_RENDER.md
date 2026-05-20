@@ -40,6 +40,7 @@ SOCIAL_FOOTER_TITLE=Powered by Ogres
 SOCIAL_TELEGRAM_URL=https://t.me/ogrecoinonsol
 SOCIAL_WEBSITE_URL=https://ogremode.com/
 SOCIAL_TWITTER_URL=https://twitter.com/i/communities/1930265213917425858
+WALLET_URL_TEMPLATE=https://solscan.io/account/{wallet}
 ```
 
 Live market refresh is also included:
@@ -52,6 +53,18 @@ DEXSCREENER_SEARCH_QUERIES=SOL/USDC,SOL,pump,raydium
 ```
 
 The bot refreshes market data silently once per minute. It does not post each refresh; commands such as `/new`, `/trending`, and `/report` use the fresh cache and show the last update age.
+
+Group anti-spam is included:
+
+```text
+COMMAND_GATE_MESSAGES=10
+ENABLE_AUTO_CA_SCAN=false
+ENABLE_IMMEDIATE_GROUP_ALERTS=false
+```
+
+Repeated group commands/buttons are ignored until 10 new chat messages appear. The only proactive group post is one clean hourly digest with trending coins, group tracked coins, watched wallets, new pairs, and high-volume tokens.
+
+Partial slash commands are ignored silently. `/w` will not trigger `/watchtoken` or the help menu. Plain words do not run commands in groups/channels; use exact slash commands or buttons.
 
 ## 3. Why this uses a web service
 
