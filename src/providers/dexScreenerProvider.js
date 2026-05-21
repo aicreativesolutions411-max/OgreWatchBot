@@ -1,4 +1,6 @@
 import { NEW_PAIR_DEFAULT_FILTERS } from '../domain/defaults.js';
+import { passesQuality, scorePair, withQuality } from '../domain/pairQuality.js';
+import { SolanaTrackerRiskProvider } from './solanaTrackerRiskProvider.js';
 import { tokenSymbolFromAddress } from '../utils/solana.js';
 
 const SOLANA_CHAIN_ID = 'solana';
@@ -18,6 +20,7 @@ export class DexScreenerProvider {
     this.lastError = '';
     this.pairsByAddress = new Map();
     this.pairsByToken = new Map();
+    this.riskProvider = new SolanaTrackerRiskProvider(config);
   }
 
   start() {
@@ -170,8 +173,9 @@ export class DexScreenerProvider {
     await this.#refreshTokenIfNeeded(ca);
     const pair = this.pairsByToken.get(ca) ?? this.pairsByAddress.get(ca);
     if (!pair) return this.fallbackProvider.scanToken(ca);
+    const quality = await this.#scorePairQuality(pair);
 
-    return {
+    return withQuality({
       ca: pair.baseTokenAddress || ca,
       symbol: pair.symbol,
       marketCapUsd: pair.marketCapUsd,
@@ -180,10 +184,10 @@ export class DexScreenerProvider {
       holders: 0,
       mintDisabled: null,
       freezeDisabled: null,
-      risk: riskFromPair(pair),
+      risk: quality.riskLevel,
       priceUsd: pair.priceUsd,
       pairAddress: pair.pairAddress
-    };
+    }, quality);
   }
 
   async #refreshTokenIfNeeded(ca) {
@@ -200,30 +204,36 @@ export class DexScreenerProvider {
   async getNewPairs(filters = NEW_PAIR_DEFAULT_FILTERS) {
     await this.ensureFreshForCommand();
 
-    const pairs = [...this.pairsByAddress.values()]
+    const basePairs = [...this.pairsByAddress.values()]
       .filter((pair) => pair.ageMinutes != null)
       .filter((pair) => pair.liquidityUsd >= filters.minLiquidityUsd)
       .filter((pair) => pair.volumeUsd >= filters.minVolumeUsd)
-      .filter((pair) => pair.marketCapUsd >= filters.minMarketCapUsd && pair.marketCapUsd <= filters.maxMarketCapUsd)
-      .sort((a, b) => a.ageMinutes - b.ageMinutes)
-      .slice(0, 10)
-      .map(pairToNewPair);
+      .filter((pair) => pair.marketCapUsd >= filters.minMarketCapUsd && pair.marketCapUsd <= filters.maxMarketCapUsd);
 
-    return pairs.length ? pairs : this.fallbackProvider.getNewPairs(filters);
+    const scored = await this.#scorePairs(basePairs);
+    const pairs = this.#qualityFilter(scored)
+      .sort((a, b) => b.quality.score - a.quality.score || a.pair.ageMinutes - b.pair.ageMinutes)
+      .slice(0, 10)
+      .map(({ pair, quality }) => pairToNewPair(pair, quality));
+
+    if (pairs.length || basePairs.length) return pairs;
+    return this.fallbackProvider.getNewPairs(filters);
   }
 
   async getTrending(kind = '5m') {
     await this.ensureFreshForCommand();
 
     const pairs = [...this.pairsByAddress.values()];
-    const sorted = sortPairsForTrend(pairs, kind).slice(0, 10).map((pair) => ({
+    const scored = await this.#scorePairs(pairs);
+    const qualified = this.#qualityFilter(scored);
+    const sorted = sortScoredPairsForTrend(qualified, kind).slice(0, 10).map(({ pair, quality }) => withQuality({
       ca: pair.baseTokenAddress || pair.pairAddress,
       symbol: pair.symbol,
       movePercent: trendPercent(pair, kind),
       reason: trendReason(pair, kind)
-    }));
+    }, quality));
 
-    if (sorted.length) {
+    if (sorted.length || pairs.length) {
       return {
         label: trendLabel(kind),
         tokens: sorted
@@ -268,6 +278,23 @@ export class DexScreenerProvider {
       error: this.lastError
     };
   }
+
+  async #scorePairs(pairs) {
+    return Promise.all(pairs.map(async (pair) => ({
+      pair,
+      quality: await this.#scorePairQuality(pair)
+    })));
+  }
+
+  async #scorePairQuality(pair) {
+    const ca = pair.baseTokenAddress || pair.pairAddress;
+    const externalRisk = await this.riskProvider.checkToken(ca);
+    return scorePair({ ...pair, externalRisk }, this.config);
+  }
+
+  #qualityFilter(scoredPairs) {
+    return scoredPairs.filter(({ quality }) => passesQuality(quality, this.config));
+  }
 }
 
 function solanaTokenAddresses(items) {
@@ -292,6 +319,12 @@ function normalizePair(pair) {
   const volume5mUsd = firstFinite(pair.volume?.m5, 0);
   const volume1hUsd = firstFinite(pair.volume?.h1, volume5mUsd);
   const volume24hUsd = firstFinite(pair.volume?.h24, volume1hUsd);
+  const buys5m = firstFinite(pair.txns?.m5?.buys, 0);
+  const sells5m = firstFinite(pair.txns?.m5?.sells, 0);
+  const buys1h = firstFinite(pair.txns?.h1?.buys, buys5m);
+  const sells1h = firstFinite(pair.txns?.h1?.sells, sells5m);
+  const buys24h = firstFinite(pair.txns?.h24?.buys, buys1h);
+  const sells24h = firstFinite(pair.txns?.h24?.sells, sells1h);
 
   return {
     chainId: pair.chainId,
@@ -307,18 +340,22 @@ function normalizePair(pair) {
     volume5mUsd,
     volume1hUsd,
     volume24hUsd,
-    volumeUsd: volume5mUsd || volume1hUsd || volume24hUsd,
+    volumeUsd: Math.max(volume5mUsd, volume1hUsd, volume24hUsd),
     priceChange5m: firstFinite(pair.priceChange?.m5, 0),
     priceChange1h: firstFinite(pair.priceChange?.h1, 0),
     priceChange24h: firstFinite(pair.priceChange?.h24, 0),
-    buys5m: firstFinite(pair.txns?.m5?.buys, 0),
-    sells5m: firstFinite(pair.txns?.m5?.sells, 0),
+    buys5m,
+    sells5m,
+    buys1h,
+    sells1h,
+    buys24h,
+    sells24h,
     ageMinutes
   };
 }
 
-function pairToNewPair(pair) {
-  return {
+function pairToNewPair(pair, quality) {
+  return withQuality({
     ca: pair.baseTokenAddress || pair.pairAddress,
     symbol: pair.symbol,
     ageMinutes: pair.ageMinutes,
@@ -327,7 +364,7 @@ function pairToNewPair(pair) {
     volumeUsd: pair.volumeUsd,
     mintDisabled: null,
     freezeDisabled: null
-  };
+  }, quality);
 }
 
 function sortPairsForTrend(pairs, kind) {
@@ -338,6 +375,15 @@ function sortPairsForTrend(pairs, kind) {
   if (kind === 'bought') return list.sort((a, b) => (b.buys5m - b.sells5m) - (a.buys5m - a.sells5m));
   if (kind === 'watched') return list.sort((a, b) => b.volume1hUsd - a.volume1hUsd);
   return list.sort((a, b) => b.priceChange5m - a.priceChange5m);
+}
+
+function sortScoredPairsForTrend(scoredPairs, kind) {
+  const sortedPairs = sortPairsForTrend(scoredPairs.map(({ pair }) => pair), kind);
+  const byAddress = new Map(scoredPairs.map((item) => [item.pair.pairAddress, item]));
+  return sortedPairs
+    .map((pair) => byAddress.get(pair.pairAddress))
+    .filter(Boolean)
+    .sort((a, b) => trendRank(b.pair, kind) - trendRank(a.pair, kind) || b.quality.score - a.quality.score);
 }
 
 function trendPercent(pair, kind) {
@@ -355,6 +401,15 @@ function trendReason(pair, kind) {
   return `$${Math.round(pair.volume5mUsd).toLocaleString('en-US')} 5m volume`;
 }
 
+function trendRank(pair, kind) {
+  if (kind === '24h') return pair.volume24hUsd;
+  if (kind === '1h') return pair.priceChange1h;
+  if (kind === 'bought') return pair.buys5m - pair.sells5m;
+  if (kind === 'lowcaps') return pair.volume1hUsd;
+  if (kind === 'watched') return pair.volume1hUsd;
+  return pair.priceChange5m || pair.priceChange1h || pair.priceChange24h;
+}
+
 function trendLabel(kind) {
   const labels = {
     '5m': '5m Movers',
@@ -365,12 +420,6 @@ function trendLabel(kind) {
     watched: 'Watched by Users'
   };
   return labels[kind] ?? 'Trending';
-}
-
-function riskFromPair(pair) {
-  if (pair.liquidityUsd >= 50_000 && pair.volume1hUsd >= 20_000) return 'Lower';
-  if (pair.liquidityUsd >= 10_000) return 'Medium';
-  return 'High';
 }
 
 function firstFinite(...values) {

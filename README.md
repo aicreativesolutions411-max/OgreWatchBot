@@ -114,6 +114,23 @@ DEXSCREENER_SEARCH_QUERIES=SOL/USDC,SOL,pump,raydium
 
 The bot refreshes DEX Screener data silently in the background every minute. It does not post each refresh. Commands like `/new`, `/trending`, `/report`, and token scans read from the latest cache and show a data freshness line. If the API is temporarily unavailable, the bot keeps running and falls back to mock data instead of hanging commands.
 
+## Quality And Rug Filter
+
+The bot scores live pairs before showing them in `/new`, `/trending`, market reports, and hourly group digests. It prefers pairs with healthier liquidity, active but not absurd volume, buy pressure, sane liquidity/market-cap ratio, and momentum that has not already gone vertical. It blocks obvious bad shapes such as heavy sell pressure, no-sell buy spikes, extreme volume/liquidity noise, very thin liquidity, and bundle/snipe-like launch bursts.
+
+```text
+MARKET_QUALITY_FILTER_ENABLED=true
+MARKET_QUALITY_MIN_SCORE=62
+```
+
+For deeper risk checks, add a Solana Tracker Data API key. Without a key, the bot still uses DexScreener-based heuristics. With a key, it also blocks rugged tokens, high risk scores, danger flags, bundler/insider warnings, mint/freeze authority risks, and other Rugcheck-style signals returned by Solana Tracker.
+
+```text
+SOLANA_TRACKER_API_KEY=
+SOLANA_TRACKER_RISK_ENABLED=true
+SOLANA_TRACKER_MAX_RISK_SCORE=7
+```
+
 Group command/button spam is gated by message flow:
 
 ```text

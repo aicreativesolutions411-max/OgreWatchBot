@@ -21,7 +21,7 @@ export class MockSolanaProvider {
     const holders = seededNumber(`${ca}:holders`, 80, 2400);
     const riskScore = seed % 3;
 
-    return {
+    return withMockQuality({
       ca,
       symbol: tokenSymbolFromAddress(ca),
       marketCapUsd,
@@ -31,11 +31,11 @@ export class MockSolanaProvider {
       mintDisabled: seed % 5 !== 0,
       freezeDisabled: seed % 7 !== 0,
       risk: ['Low', 'Medium', 'High'][riskScore]
-    };
+    }, ca);
   }
 
   async getNewPairs(filters = NEW_PAIR_DEFAULT_FILTERS) {
-    return SAMPLE_CONTRACTS.map((ca, index) => ({
+    return SAMPLE_CONTRACTS.map((ca, index) => withMockQuality({
       ca,
       symbol: tokenSymbolFromAddress(`${ca}:new:${index}`),
       ageMinutes: seededNumber(`${ca}:age`, 4, 28),
@@ -44,7 +44,7 @@ export class MockSolanaProvider {
       volumeUsd: seededNumber(`${ca}:new:volume`, filters.minVolumeUsd, 120_000),
       mintDisabled: true,
       freezeDisabled: true
-    })).sort((a, b) => a.ageMinutes - b.ageMinutes);
+    }, ca)).sort((a, b) => b.qualityScore - a.qualityScore || a.ageMinutes - b.ageMinutes);
   }
 
   async getTrending(kind = '5m') {
@@ -59,12 +59,12 @@ export class MockSolanaProvider {
 
     return {
       label: labels[kind] ?? 'Trending',
-      tokens: SAMPLE_CONTRACTS.map((ca, index) => ({
+      tokens: SAMPLE_CONTRACTS.map((ca, index) => withMockQuality({
         ca,
         symbol: tokenSymbolFromAddress(`${ca}:${kind}`),
         movePercent: seededNumber(`${ca}:${kind}:move`, 12, 88),
         reason: reasonsFor(kind, index)
-      })).sort((a, b) => b.movePercent - a.movePercent)
+      }, ca)).sort((a, b) => b.movePercent - a.movePercent)
     };
   }
 
@@ -159,4 +159,16 @@ function reasonsFor(kind, index) {
     watched: ['watched by users', 'group watchlist activity', 'DM watchlist growth', 'repeat scans']
   };
   return reasonSets[kind]?.[index % 4] ?? 'market movement';
+}
+
+function withMockQuality(item, seed) {
+  const score = seededNumber(`${seed}:quality`, 68, 91);
+  return {
+    ...item,
+    qualityScore: score,
+    qualityTier: score >= 82 ? 'A' : 'B',
+    qualityRiskLevel: score >= 82 ? 'Lower' : 'Medium',
+    qualityWarnings: [],
+    qualityStrengths: ['mock quality pass']
+  };
 }

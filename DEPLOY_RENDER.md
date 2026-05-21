@@ -50,9 +50,21 @@ DATA_PROVIDER=dexscreener
 MARKET_REFRESH_INTERVAL_SECONDS=60
 DEXSCREENER_API_BASE=https://api.dexscreener.com
 DEXSCREENER_SEARCH_QUERIES=SOL/USDC,SOL,pump,raydium
+MARKET_QUALITY_FILTER_ENABLED=true
+MARKET_QUALITY_MIN_SCORE=62
 ```
 
-The bot refreshes market data silently once per minute. It does not post each refresh; commands such as `/new`, `/trending`, and `/report` use the fresh cache and show the last update age.
+The bot refreshes market data silently once per minute. It does not post each refresh; commands such as `/new`, `/trending`, and `/report` use the fresh cache and show the last update age. New pairs, trending lists, reports, and group digests are quality-filtered before posting.
+
+Optional deeper Solana Tracker risk checks:
+
+```text
+SOLANA_TRACKER_API_KEY=
+SOLANA_TRACKER_RISK_ENABLED=true
+SOLANA_TRACKER_MAX_RISK_SCORE=7
+```
+
+Without this API key, the bot still blocks bad DexScreener patterns like heavy sell pressure, thin liquidity, extreme volume/liquidity noise, no-sell spikes, and bundle/snipe-like launch bursts. With the key, it also blocks rugged tokens, danger flags, high risk scores, bundler/insider warnings, and mint/freeze authority risks.
 
 Group anti-spam is included:
 

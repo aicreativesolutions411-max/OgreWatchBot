@@ -171,6 +171,8 @@ export function scanMessage(scan, config) {
     `Volume 5m: <b>${usd(scan.volume5mUsd)}</b>`,
     `Holders: <b>${numberOrUnknown(scan.holders)}</b>`,
     `Risk: <b>${escapeHtml(scan.risk)}</b>`,
+    `Quality: <b>${qualityLabel(scan)}</b>`,
+    scan.qualityWarnings?.length ? `Warnings: ${escapeHtml(scan.qualityWarnings.slice(0, 2).join(', '))}` : `Strengths: ${escapeHtml((scan.qualityStrengths ?? []).slice(0, 2).join(', ') || 'market structure')}`,
     '',
     `Mint disabled: <b>${yesNoUnknown(scan.mintDisabled)}</b>`,
     `Freeze disabled: <b>${yesNoUnknown(scan.freezeDisabled)}</b>`,
@@ -182,10 +184,11 @@ export function newPairsMessage(pairs, config = {}, status = null) {
   lines.push(...marketStatusLines(status));
   if (status) lines.push('');
   pairs.forEach((pair, index) => {
-    lines.push(`${index + 1}. <b>${tokenLink(pair.symbol, pair.ca, config)}</b> - ${minutesAgo(pair.ageMinutes)} - ${usd(pair.marketCapUsd)} MC - ${usd(pair.liquidityUsd)} liq`);
+    lines.push(`${index + 1}. <b>${tokenLink(pair.symbol, pair.ca, config)}</b> - ${minutesAgo(pair.ageMinutes)} - ${usd(pair.marketCapUsd)} MC - ${usd(pair.liquidityUsd)} liq - ${qualityLabel(pair)}`);
   });
+  if (!pairs.length) lines.push('No quality matches right now. The filter is holding back risky/noisy pairs.');
   lines.push('');
-  lines.push('Filters: liq over $10K, volume over $20K, market cap range.');
+  lines.push('Filters: liq over $10K, volume over $20K, market cap range, quality score, rug/bundle risk.');
   return lines.join('\n');
 }
 
@@ -197,6 +200,8 @@ export function newPairFiltersMessage() {
     `Minimum liquidity: <b>${usd(f.minLiquidityUsd)}</b>`,
     `Minimum volume: <b>${usd(f.minVolumeUsd)}</b>`,
     `Market cap range: <b>${usd(f.minMarketCapUsd)}-${usd(f.maxMarketCapUsd)}</b>`,
+    'Quality score: <b>ON</b>',
+    'Blocks: <b>thin liquidity, heavy sell pressure, no-sell spikes, bundle-like bursts, extreme volume/liquidity noise</b>',
     'Mint disabled: <b>Unknown on DexScreener source</b>',
     'Freeze disabled: <b>Unknown on DexScreener source</b>',
     'Cooldown: <b>10 minutes</b>'
@@ -208,8 +213,9 @@ export function trendingMessage(tokens, label = 'Trending', config = {}, status 
   lines.push(...marketStatusLines(status));
   if (status) lines.push('');
   tokens.forEach((token, index) => {
-    lines.push(`${index + 1}. <b>${tokenLink(token.symbol, token.ca, config)}</b> ${percent(token.movePercent)} - ${escapeHtml(token.reason)}`);
+    lines.push(`${index + 1}. <b>${tokenLink(token.symbol, token.ca, config)}</b> ${percent(token.movePercent)} - ${escapeHtml(token.reason)} - ${qualityLabel(token)}`);
   });
+  if (!tokens.length) lines.push('No quality matches right now. Risky/noisy movers are being filtered.');
   return lines.join('\n');
 }
 
@@ -236,13 +242,15 @@ export function marketReportMessage(report, config, status = null) {
   if (status) lines.push('');
   lines.push('<b>Top watched tokens</b>');
   report.topTokens.forEach((token, index) => {
-    lines.push(`${index + 1}. <b>${tokenLink(token.symbol, token.ca, config)}</b> ${percent(token.movePercent)} - ${escapeHtml(token.reason)}`);
+    lines.push(`${index + 1}. <b>${tokenLink(token.symbol, token.ca, config)}</b> ${percent(token.movePercent)} - ${escapeHtml(token.reason)} - ${qualityLabel(token)}`);
   });
+  if (!report.topTokens.length) lines.push('No quality matches right now.');
   lines.push('');
   lines.push('<b>New pairs worth watching</b>');
   report.newPairs.forEach((pair, index) => {
-    lines.push(`${index + 1}. <b>${tokenLink(pair.symbol, pair.ca, config)}</b> - ${usd(pair.liquidityUsd)} liq - ${minutesAgo(pair.ageMinutes)}`);
+    lines.push(`${index + 1}. <b>${tokenLink(pair.symbol, pair.ca, config)}</b> - ${usd(pair.liquidityUsd)} liq - ${minutesAgo(pair.ageMinutes)} - ${qualityLabel(pair)}`);
   });
+  if (!report.newPairs.length) lines.push('No new pairs passed the quality filter.');
   return lines.join('\n');
 }
 
@@ -258,7 +266,7 @@ export function hourlyGroupUpdateMessage(update, config, status = null) {
   lines.push('<b>Group tracked coins</b>');
   if (update.trackedTokens?.length) {
     update.trackedTokens.slice(0, 5).forEach((scan, index) => {
-      lines.push(`${index + 1}. <b>${tokenLink(scan.symbol, scan.ca, config)}</b> - ${usd(scan.marketCapUsd)} MC - ${usd(scan.liquidityUsd)} liq`);
+      lines.push(`${index + 1}. <b>${tokenLink(scan.symbol, scan.ca, config)}</b> - ${usd(scan.marketCapUsd)} MC - ${usd(scan.liquidityUsd)} liq - ${qualityLabel(scan)}`);
     });
   } else {
     lines.push('None tracked yet.');
@@ -370,7 +378,7 @@ function pushTokenRows(lines, tokens = [], config = {}, detailBuilder = () => ''
 
   tokens.slice(0, 5).forEach((token, index) => {
     const detail = detailBuilder(token);
-    lines.push(`${index + 1}. <b>${tokenLink(token.symbol, token.ca, config)}</b>${detail ? ` - ${detail}` : ''}`);
+    lines.push(`${index + 1}. <b>${tokenLink(token.symbol, token.ca, config)}</b>${detail ? ` - ${detail}` : ''} - ${qualityLabel(token)}`);
   });
 }
 
@@ -381,7 +389,7 @@ function pushPairRows(lines, pairs = [], config = {}) {
   }
 
   pairs.slice(0, 5).forEach((pair, index) => {
-    lines.push(`${index + 1}. <b>${tokenLink(pair.symbol, pair.ca, config)}</b> - ${minutesAgo(pair.ageMinutes)} - ${usd(pair.liquidityUsd)} liq`);
+    lines.push(`${index + 1}. <b>${tokenLink(pair.symbol, pair.ca, config)}</b> - ${minutesAgo(pair.ageMinutes)} - ${usd(pair.liquidityUsd)} liq - ${qualityLabel(pair)}`);
   });
 }
 
@@ -397,6 +405,14 @@ function tradeText(text, symbol, ca, config = {}) {
     ca,
     symbol
   });
+}
+
+function qualityLabel(item = {}) {
+  const score = Number(item.qualityScore);
+  if (!Number.isFinite(score)) return 'Q pending';
+  const tier = item.qualityTier ? `/${escapeHtml(item.qualityTier)}` : '';
+  const risk = item.qualityRiskLevel ? ` ${escapeHtml(item.qualityRiskLevel)}` : '';
+  return `Q ${score}${tier}${risk}`;
 }
 
 function linkKnownEntities(text, config = {}, entity = {}) {
