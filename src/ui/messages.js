@@ -179,8 +179,8 @@ export function scanMessage(scan, config) {
   ].join('\n');
 }
 
-export function newPairsMessage(pairs, config = {}, status = null) {
-  const lines = ['🆕 <b>New Solana Pairs</b>', ''];
+export function newPairsMessage(pairs, config = {}, status = null, filters = NEW_PAIR_DEFAULT_FILTERS) {
+  const lines = [`🆕 <b>New Solana Pairs (${ageWindowLabel(filters.maxAgeMinutes)})</b>`, ''];
   lines.push(...marketStatusLines(status));
   if (status) lines.push('');
   pairs.forEach((pair, index) => {
@@ -188,7 +188,8 @@ export function newPairsMessage(pairs, config = {}, status = null) {
   });
   if (!pairs.length) lines.push('No quality matches right now. The filter is holding back risky/noisy pairs.');
   lines.push('');
-  lines.push('Filters: liq over $10K, volume over $20K, market cap range, quality score, rug/bundle risk.');
+  lines.push(`Filters: age under ${ageWindowLabel(filters.maxAgeMinutes)}, liq over ${usd(filters.minLiquidityUsd)}, quality score, rug/bundle risk.`);
+  lines.push(`Fresh exception: under 1h can pass from ${usd(filters.freshMinLiquidityUsd)} liq if buys/MC/volume are strong.`);
   return lines.join('\n');
 }
 
@@ -198,8 +199,11 @@ export function newPairFiltersMessage() {
     '🧪 <b>New Pair Filters</b>',
     '',
     `Minimum liquidity: <b>${usd(f.minLiquidityUsd)}</b>`,
+    `Fresh potential liquidity: <b>${usd(f.freshMinLiquidityUsd)}</b> under 1h`,
     `Minimum volume: <b>${usd(f.minVolumeUsd)}</b>`,
+    `Fresh potential volume: <b>${usd(f.freshMinVolumeUsd)}</b> under 1h`,
     `Market cap range: <b>${usd(f.minMarketCapUsd)}-${usd(f.maxMarketCapUsd)}</b>`,
+    `Default age window: <b>${ageWindowLabel(f.maxAgeMinutes)}</b>`,
     'Quality score: <b>ON</b>',
     'Blocks: <b>thin liquidity, heavy sell pressure, no-sell spikes, bundle-like bursts, extreme volume/liquidity noise</b>',
     'Mint disabled: <b>Unknown on DexScreener source</b>',
@@ -413,6 +417,19 @@ function qualityLabel(item = {}) {
   const tier = item.qualityTier ? `/${escapeHtml(item.qualityTier)}` : '';
   const risk = item.qualityRiskLevel ? ` ${escapeHtml(item.qualityRiskLevel)}` : '';
   return `Q ${score}${tier}${risk}`;
+}
+
+function ageWindowLabel(minutes) {
+  const value = Number(minutes);
+  if (value === 10) return '10m';
+  if (value === 30) return '30m';
+  if (value === 60) return '1h';
+  if (value === 360) return '6h';
+  if (value === 720) return '12h';
+  if (value === 1440) return '1d';
+  if (Number.isFinite(value) && value < 60) return `${value}m`;
+  if (Number.isFinite(value) && value % 60 === 0) return `${value / 60}h`;
+  return '1h';
 }
 
 function linkKnownEntities(text, config = {}, entity = {}) {

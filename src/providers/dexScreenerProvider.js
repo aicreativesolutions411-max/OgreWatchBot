@@ -206,9 +206,7 @@ export class DexScreenerProvider {
 
     const basePairs = [...this.pairsByAddress.values()]
       .filter((pair) => pair.ageMinutes != null)
-      .filter((pair) => pair.liquidityUsd >= filters.minLiquidityUsd)
-      .filter((pair) => pair.volumeUsd >= filters.minVolumeUsd)
-      .filter((pair) => pair.marketCapUsd >= filters.minMarketCapUsd && pair.marketCapUsd <= filters.maxMarketCapUsd);
+      .filter((pair) => pairPassesNewPairFilters(pair, filters));
 
     const scored = await this.#scorePairs(basePairs);
     const pairs = this.#qualityFilter(scored)
@@ -216,7 +214,7 @@ export class DexScreenerProvider {
       .slice(0, 10)
       .map(({ pair, quality }) => pairToNewPair(pair, quality));
 
-    if (pairs.length || basePairs.length) return pairs;
+    if (this.pairsByAddress.size > 0) return pairs;
     return this.fallbackProvider.getNewPairs(filters);
   }
 
@@ -225,7 +223,8 @@ export class DexScreenerProvider {
 
     const pairs = [...this.pairsByAddress.values()];
     const scored = await this.#scorePairs(pairs);
-    const qualified = this.#qualityFilter(scored);
+    const qualified = this.#qualityFilter(scored)
+      .filter(({ pair }) => pairIsFreshOrSpiking(pair, kind));
     const sorted = sortScoredPairsForTrend(qualified, kind).slice(0, 10).map(({ pair, quality }) => withQuality({
       ca: pair.baseTokenAddress || pair.pairAddress,
       symbol: pair.symbol,
@@ -365,6 +364,55 @@ function pairToNewPair(pair, quality) {
     mintDisabled: null,
     freezeDisabled: null
   }, quality);
+}
+
+function pairPassesNewPairFilters(pair, filters = NEW_PAIR_DEFAULT_FILTERS) {
+  const maxAgeMinutes = firstFinite(filters.maxAgeMinutes, NEW_PAIR_DEFAULT_FILTERS.maxAgeMinutes);
+  if (pair.ageMinutes == null || pair.ageMinutes > maxAgeMinutes) return false;
+
+  const freshPotential = pair.ageMinutes <= 60 && isFreshPotentialPair(pair);
+  const minLiquidityUsd = freshPotential
+    ? firstFinite(filters.freshMinLiquidityUsd, NEW_PAIR_DEFAULT_FILTERS.freshMinLiquidityUsd)
+    : firstFinite(filters.minLiquidityUsd, NEW_PAIR_DEFAULT_FILTERS.minLiquidityUsd);
+  const minVolumeUsd = freshPotential
+    ? firstFinite(filters.freshMinVolumeUsd, NEW_PAIR_DEFAULT_FILTERS.freshMinVolumeUsd)
+    : firstFinite(filters.minVolumeUsd, NEW_PAIR_DEFAULT_FILTERS.minVolumeUsd);
+  const minMarketCapUsd = freshPotential
+    ? firstFinite(filters.freshMinMarketCapUsd, NEW_PAIR_DEFAULT_FILTERS.freshMinMarketCapUsd)
+    : firstFinite(filters.minMarketCapUsd, NEW_PAIR_DEFAULT_FILTERS.minMarketCapUsd);
+  const maxMarketCapUsd = firstFinite(filters.maxMarketCapUsd, NEW_PAIR_DEFAULT_FILTERS.maxMarketCapUsd);
+
+  return pair.liquidityUsd >= minLiquidityUsd
+    && pair.volumeUsd >= minVolumeUsd
+    && pair.marketCapUsd >= minMarketCapUsd
+    && pair.marketCapUsd <= maxMarketCapUsd;
+}
+
+function isFreshPotentialPair(pair) {
+  const buyPressure5m = pair.buys5m >= 8 && pair.buys5m >= pair.sells5m * 1.35;
+  const buyPressure1h = pair.buys1h >= 18 && pair.buys1h >= pair.sells1h * 1.25;
+  const marketCapMove = pair.priceChange5m >= 8 || pair.priceChange1h >= 15;
+  const activeVolume = pair.volume5mUsd >= 5_000 || pair.volume1hUsd >= 10_000;
+  const saneLiquidity = pair.marketCapUsd > 0 && pair.liquidityUsd / pair.marketCapUsd >= 0.035;
+  return (buyPressure5m || buyPressure1h) && marketCapMove && activeVolume && saneLiquidity;
+}
+
+function pairIsFreshOrSpiking(pair, kind) {
+  const ageMinutes = Number(pair.ageMinutes);
+  if (!Number.isFinite(ageMinutes) || ageMinutes <= 1440) return true;
+
+  const buySpike5m = pair.buys5m >= 12 && pair.buys5m >= pair.sells5m * 1.5;
+  const buySpike1h = pair.buys1h >= 30 && pair.buys1h >= pair.sells1h * 1.3;
+  const buySpike24h = pair.buys24h >= 100 && pair.buys24h >= pair.sells24h * 1.15;
+  const mcSpike5m = pair.priceChange5m >= 12;
+  const mcSpike1h = pair.priceChange1h >= 25;
+  const mcSpike24h = pair.priceChange24h >= 45;
+
+  if (kind === '24h') return buySpike24h && mcSpike24h && pair.volume24hUsd >= pair.liquidityUsd * 1.5;
+  if (kind === '1h' || kind === 'watched') return buySpike1h && mcSpike1h;
+  if (kind === 'bought') return (buySpike5m || buySpike1h) && (mcSpike5m || mcSpike1h);
+  if (kind === 'lowcaps') return pair.marketCapUsd <= 500_000 && (buySpike1h || buySpike5m) && (mcSpike1h || mcSpike5m);
+  return (buySpike5m && mcSpike5m) || (buySpike1h && mcSpike1h);
 }
 
 function sortPairsForTrend(pairs, kind) {

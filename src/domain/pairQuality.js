@@ -1,9 +1,11 @@
 const DEFAULT_MIN_SCORE = 62;
 const DEFAULT_MAX_RISK_SCORE = 7;
+const DEFAULT_FRESH_MIN_LIQUIDITY_USD = 5_000;
 
 export function scorePair(pair, options = {}) {
   const minScore = numberOption(options.marketQualityMinScore, DEFAULT_MIN_SCORE);
   const maxRiskScore = numberOption(options.solanaTrackerMaxRiskScore, DEFAULT_MAX_RISK_SCORE);
+  const freshMinLiquidityUsd = numberOption(options.marketQualityFreshMinLiquidityUsd, DEFAULT_FRESH_MIN_LIQUIDITY_USD);
   const warnings = [];
   const strengths = [];
   let score = 50;
@@ -27,9 +29,23 @@ export function scorePair(pair, options = {}) {
   const liquidityToMarketCap = marketCapUsd > 0 ? liquidityUsd / marketCapUsd : 0;
   const volumeToLiquidity = liquidityUsd > 0 ? volumeUsd / liquidityUsd : 0;
   const avg5mTradeUsd = totalTx5m > 0 ? volume5mUsd / totalTx5m : 0;
+  const freshPotential = isFreshPotential({
+    liquidityUsd,
+    marketCapUsd,
+    volume5mUsd,
+    volume1hUsd,
+    buys5m,
+    sells5m,
+    buys1h,
+    sells1h,
+    priceChange5m,
+    priceChange1h,
+    ageMinutes
+  });
 
   if (marketCapUsd <= 0) warnings.push('missing market cap');
-  if (liquidityUsd < 10_000) warnings.push('thin liquidity');
+  if (liquidityUsd < freshMinLiquidityUsd) warnings.push('thin liquidity');
+  else if (liquidityUsd < 10_000 && !freshPotential) warnings.push('thin liquidity');
   if (liquidityToMarketCap > 0 && liquidityToMarketCap < 0.025) warnings.push('liquidity too thin for MC');
   if (volumeToLiquidity > 18) warnings.push('volume looks noisy vs liquidity');
   if (priceChange5m > 260 || priceChange1h > 650) warnings.push('extreme spike already');
@@ -48,6 +64,9 @@ export function scorePair(pair, options = {}) {
   } else if (liquidityUsd >= 25_000) {
     score += 12;
     strengths.push('usable liquidity');
+  } else if (liquidityUsd >= freshMinLiquidityUsd && freshPotential) {
+    score += 7;
+    strengths.push('early low-liq momentum');
   } else if (liquidityUsd < 12_000) {
     score -= 12;
   }
@@ -126,7 +145,9 @@ export function scorePair(pair, options = {}) {
     liquidityUsd,
     liquidityToMarketCap,
     volumeToLiquidity,
-    maxRiskScore
+    maxRiskScore,
+    freshMinLiquidityUsd,
+    freshPotential
   });
 
   return {
@@ -157,9 +178,10 @@ export function passesQuality(quality, options = {}) {
   return Boolean(quality?.passes);
 }
 
-function isBlocked({ score, minScore, warnings, externalRisk, marketCapUsd, liquidityUsd, liquidityToMarketCap, volumeToLiquidity, maxRiskScore }) {
+function isBlocked({ score, minScore, warnings, externalRisk, marketCapUsd, liquidityUsd, liquidityToMarketCap, volumeToLiquidity, maxRiskScore, freshMinLiquidityUsd, freshPotential }) {
   if (marketCapUsd <= 0 || liquidityUsd <= 0) return true;
-  if (liquidityUsd < 10_000) return true;
+  if (liquidityUsd < freshMinLiquidityUsd) return true;
+  if (liquidityUsd < 10_000 && !freshPotential) return true;
   if (liquidityToMarketCap > 0 && liquidityToMarketCap < 0.015) return true;
   if (volumeToLiquidity > 28) return true;
   if (externalRisk?.rugged) return true;
@@ -169,6 +191,17 @@ function isBlocked({ score, minScore, warnings, externalRisk, marketCapUsd, liqu
   if (warnings.includes('no sells after heavy buying')) return true;
   if (warnings.includes('heavy sell pressure')) return true;
   return score < minScore;
+}
+
+function isFreshPotential({ liquidityUsd, marketCapUsd, volume5mUsd, volume1hUsd, buys5m, sells5m, buys1h, sells1h, priceChange5m, priceChange1h, ageMinutes }) {
+  if (ageMinutes == null || ageMinutes > 60) return false;
+  if (marketCapUsd <= 0 || liquidityUsd <= 0) return false;
+  const buyPressure5m = buys5m >= 8 && buys5m >= sells5m * 1.35;
+  const buyPressure1h = buys1h >= 18 && buys1h >= sells1h * 1.25;
+  const marketCapMove = priceChange5m >= 8 || priceChange1h >= 15;
+  const activeVolume = volume5mUsd >= 5_000 || volume1hUsd >= 10_000;
+  const saneLiquidity = liquidityUsd / marketCapUsd >= 0.035;
+  return (buyPressure5m || buyPressure1h) && marketCapMove && activeVolume && saneLiquidity;
 }
 
 function isBundleLike({ buys5m, sells5m, priceChange5m, ageMinutes, volumeToLiquidity }) {

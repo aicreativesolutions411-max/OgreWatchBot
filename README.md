@@ -119,9 +119,17 @@ The bot refreshes DEX Screener data silently in the background every minute. It 
 The bot scores live pairs before showing them in `/new`, `/trending`, market reports, and hourly group digests. It prefers pairs with healthier liquidity, active but not absurd volume, buy pressure, sane liquidity/market-cap ratio, and momentum that has not already gone vertical. It blocks obvious bad shapes such as heavy sell pressure, no-sell buy spikes, extreme volume/liquidity noise, very thin liquidity, and bundle/snipe-like launch bursts.
 
 ```text
+NEW_PAIR_DEFAULT_AGE_MINUTES=60
+NEW_PAIR_FRESH_MIN_LIQUIDITY_USD=5000
+NEW_PAIR_FRESH_MIN_VOLUME_USD=8000
 MARKET_QUALITY_FILTER_ENABLED=true
 MARKET_QUALITY_MIN_SCORE=62
+MARKET_QUALITY_FRESH_MIN_LIQUIDITY_USD=5000
 ```
+
+The `/new` screen defaults to pairs under 1 hour old and includes buttons for `10m`, `30m`, `1h`, `6h`, `12h`, and `1d`. The hourly group digest only uses the 1-hour new-pair window. Under-1-hour pairs can pass with lower liquidity when buys, market-cap movement, volume, and liquidity/MC ratio look strong enough.
+
+Older pairs are kept out of trending lists unless they are actually spiking, for example strong buy pressure plus market-cap movement. That keeps stale high-volume coins from crowding the feed.
 
 For deeper risk checks, add a Solana Tracker Data API key. Without a key, the bot still uses DexScreener-based heuristics. With a key, it also blocks rugged tokens, high risk scores, danger flags, bundler/insider warnings, mint/freeze authority risks, and other Rugcheck-style signals returned by Solana Tracker.
 

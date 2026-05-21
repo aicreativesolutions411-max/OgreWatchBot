@@ -1,4 +1,5 @@
 import { AntiSpam } from './antiSpam.js';
+import { NEW_PAIR_DEFAULT_FILTERS } from './defaults.js';
 import { actionButtons, reportKeyboard } from '../ui/keyboards.js';
 import {
   digestMessage,
@@ -187,7 +188,12 @@ export class AlertEngine {
     const [trending, highVolume, newPairs, trackedTokens] = await Promise.all([
       this.provider.getTrending('5m'),
       this.provider.getTrending('24h'),
-      this.provider.getNewPairs(),
+      this.provider.getNewPairs({
+        ...NEW_PAIR_DEFAULT_FILTERS,
+        freshMinLiquidityUsd: this.config.newPairFreshMinLiquidityUsd ?? NEW_PAIR_DEFAULT_FILTERS.freshMinLiquidityUsd,
+        freshMinVolumeUsd: this.config.newPairFreshMinVolumeUsd ?? NEW_PAIR_DEFAULT_FILTERS.freshMinVolumeUsd,
+        maxAgeMinutes: 60
+      }),
       this.scanTrackedGroupTokens(group)
     ]);
 

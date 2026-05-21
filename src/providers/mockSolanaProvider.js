@@ -35,6 +35,7 @@ export class MockSolanaProvider {
   }
 
   async getNewPairs(filters = NEW_PAIR_DEFAULT_FILTERS) {
+    const maxAgeMinutes = Number(filters.maxAgeMinutes ?? NEW_PAIR_DEFAULT_FILTERS.maxAgeMinutes);
     return SAMPLE_CONTRACTS.map((ca, index) => withMockQuality({
       ca,
       symbol: tokenSymbolFromAddress(`${ca}:new:${index}`),
@@ -44,7 +45,9 @@ export class MockSolanaProvider {
       volumeUsd: seededNumber(`${ca}:new:volume`, filters.minVolumeUsd, 120_000),
       mintDisabled: true,
       freezeDisabled: true
-    }, ca)).sort((a, b) => b.qualityScore - a.qualityScore || a.ageMinutes - b.ageMinutes);
+    }, ca))
+      .filter((pair) => pair.ageMinutes <= maxAgeMinutes)
+      .sort((a, b) => b.qualityScore - a.qualityScore || a.ageMinutes - b.ageMinutes);
   }
 
   async getTrending(kind = '5m') {

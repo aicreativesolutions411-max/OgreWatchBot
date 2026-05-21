@@ -1,4 +1,4 @@
-import { NEW_PAIR_DEFAULT_FILTERS } from './domain/defaults.js';
+import { NEW_PAIR_AGE_OPTIONS, NEW_PAIR_DEFAULT_FILTERS } from './domain/defaults.js';
 import { AntiSpam } from './domain/antiSpam.js';
 import {
   actionButtons,
@@ -571,9 +571,20 @@ export class RadarBot {
     }
   }
 
-  async commandNewPairs(chatId) {
-    const pairs = await this.provider.getNewPairs(NEW_PAIR_DEFAULT_FILTERS);
-    await this.telegram.sendMessage(chatId, newPairsMessage(pairs, this.config, this.provider.marketStatus?.()), newPairsKeyboard());
+  async commandNewPairs(chatId, options = {}) {
+    const maxAgeMinutes = normalizeNewPairAge(options.maxAgeMinutes ?? this.config.newPairDefaultAgeMinutes ?? NEW_PAIR_DEFAULT_FILTERS.maxAgeMinutes);
+    const filters = {
+      ...NEW_PAIR_DEFAULT_FILTERS,
+      freshMinLiquidityUsd: this.config.newPairFreshMinLiquidityUsd ?? NEW_PAIR_DEFAULT_FILTERS.freshMinLiquidityUsd,
+      freshMinVolumeUsd: this.config.newPairFreshMinVolumeUsd ?? NEW_PAIR_DEFAULT_FILTERS.freshMinVolumeUsd,
+      maxAgeMinutes
+    };
+    const pairs = await this.provider.getNewPairs(filters);
+    await this.telegram.sendMessage(
+      chatId,
+      newPairsMessage(pairs, this.config, this.provider.marketStatus?.(), filters),
+      newPairsKeyboard(maxAgeMinutes)
+    );
   }
 
   async commandTrending(chatId, kind) {
@@ -785,13 +796,18 @@ export class RadarBot {
   }
 
   async callbackNewPairs(chatId, data) {
-    const action = data.split(':')[1];
+    const [, action, rawValue] = data.split(':');
     if (action === 'filters') {
-      await this.telegram.sendMessage(chatId, newPairFiltersMessage(), newPairsKeyboard());
+      const maxAgeMinutes = normalizeNewPairAge(this.config.newPairDefaultAgeMinutes ?? NEW_PAIR_DEFAULT_FILTERS.maxAgeMinutes);
+      await this.telegram.sendMessage(chatId, newPairFiltersMessage(), newPairsKeyboard(maxAgeMinutes));
       return;
     }
     if (action === 'watch') {
       await this.telegram.sendMessage(chatId, 'New-pair watch mode is ready. Group auto-posting still follows admin settings and cooldowns.');
+      return;
+    }
+    if (action === 'age') {
+      await this.commandNewPairs(chatId, { maxAgeMinutes: rawValue });
       return;
     }
     await this.commandNewPairs(chatId);
@@ -1134,7 +1150,9 @@ function commandActionKey(command, args = []) {
 
 function callbackActionKey(data = '') {
   if (data === 'menu:start') return 'menu:start';
-  if (data === 'menu:new' || data.startsWith('new:')) return data === 'new:filters' ? 'market:new:filters' : 'market:new';
+  if (data === 'menu:new') return 'market:new';
+  if (data.startsWith('new:age:')) return `market:${data}`;
+  if (data.startsWith('new:')) return data === 'new:filters' ? 'market:new:filters' : 'market:new';
   if (data === 'menu:trending') return 'market:trending:5m';
   if (data.startsWith('trending:')) return `market:trending:${data.split(':')[1] ?? '5m'}`;
   if (data === 'menu:report') return 'market:report';
@@ -1193,4 +1211,10 @@ function normalizeTicker(value) {
     .replace(/^\$/, '')
     .toUpperCase()
     .replace(/[^A-Z0-9]/g, '');
+}
+
+function normalizeNewPairAge(value) {
+  const minutes = Number(value);
+  const allowed = NEW_PAIR_AGE_OPTIONS.map((option) => option.minutes);
+  return allowed.includes(minutes) ? minutes : NEW_PAIR_DEFAULT_FILTERS.maxAgeMinutes;
 }

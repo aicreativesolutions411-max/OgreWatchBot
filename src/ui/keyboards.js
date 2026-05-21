@@ -1,4 +1,4 @@
-import { ALERT_MODES } from '../domain/defaults.js';
+import { ALERT_MODES, NEW_PAIR_AGE_OPTIONS } from '../domain/defaults.js';
 import { linkFromTemplate } from '../utils/format.js';
 
 export function mainMenuKeyboard(options = {}) {
@@ -56,8 +56,15 @@ export function actionButtons(config, ca, options = {}) {
   return inlineKeyboard(rows);
 }
 
-export function newPairsKeyboard() {
+export function newPairsKeyboard(activeAgeMinutes = 60) {
+  const ageButtons = NEW_PAIR_AGE_OPTIONS.map((option) => {
+    const marker = Number(activeAgeMinutes) === option.minutes ? '✓ ' : '';
+    return callbackButton(`${marker}${option.label}`, `new:age:${option.minutes}`);
+  });
+
   return inlineKeyboard([
+    ageButtons.slice(0, 3),
+    ageButtons.slice(3),
     [callbackButton('Refresh', 'new:refresh'), callbackButton('Filters', 'new:filters')],
     [callbackButton('Watch New Pairs', 'new:watch'), callbackButton('Back', 'menu:start')]
   ]);
