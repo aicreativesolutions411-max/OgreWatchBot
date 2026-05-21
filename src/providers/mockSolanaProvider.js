@@ -54,7 +54,7 @@ export class MockSolanaProvider {
     const labels = {
       '5m': '5m Movers',
       '1h': '1h Movers',
-      '24h': '24h Volume',
+      '24h': '24h Momentum',
       lowcaps: 'New Low Caps',
       bought: 'Most Bought',
       watched: 'Watched by Users'
@@ -65,6 +65,8 @@ export class MockSolanaProvider {
       tokens: SAMPLE_CONTRACTS.map((ca, index) => withMockQuality({
         ca,
         symbol: tokenSymbolFromAddress(`${ca}:${kind}`),
+        marketCapUsd: seededNumber(`${ca}:${kind}:mc`, 28_000, 420_000),
+        liquidityUsd: seededNumber(`${ca}:${kind}:liq`, 4_500, 90_000),
         movePercent: seededNumber(`${ca}:${kind}:move`, 12, 88),
         reason: reasonsFor(kind, index)
       }, ca)).sort((a, b) => b.movePercent - a.movePercent)
@@ -154,9 +156,9 @@ export class MockSolanaProvider {
 
 function reasonsFor(kind, index) {
   const reasonSets = {
-    '5m': ['volume spike', 'whale buys', 'liquidity added', 'holder jump'],
+    '5m': ['MC momentum', 'whale buys', 'liquidity added', 'holder jump'],
     '1h': ['market cap breakout', 'repeated buys', 'trend acceleration', 'new holders'],
-    '24h': ['high volume', 'steady accumulation', 'strong liquidity', 'watchlist demand'],
+    '24h': ['MC and liquidity momentum', 'steady accumulation', 'strong liquidity', 'watchlist demand'],
     lowcaps: ['low cap with liquidity', 'fresh pair traction', 'early holder growth', 'clean safety flags'],
     bought: ['most bought by tracked wallets', 'clustered buys', 'smart money entry', 'buy pressure'],
     watched: ['watched by users', 'group watchlist activity', 'DM watchlist growth', 'repeat scans']

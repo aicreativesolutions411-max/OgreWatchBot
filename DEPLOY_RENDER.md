@@ -51,14 +51,15 @@ MARKET_REFRESH_INTERVAL_SECONDS=60
 DEXSCREENER_API_BASE=https://api.dexscreener.com
 DEXSCREENER_SEARCH_QUERIES=SOL/USDC,SOL,pump,raydium
 NEW_PAIR_DEFAULT_AGE_MINUTES=60
-NEW_PAIR_FRESH_MIN_LIQUIDITY_USD=5000
+NEW_PAIR_MIN_LIQUIDITY_USD=5000
+NEW_PAIR_FRESH_MIN_LIQUIDITY_USD=2500
 NEW_PAIR_FRESH_MIN_VOLUME_USD=8000
 MARKET_QUALITY_FILTER_ENABLED=true
 MARKET_QUALITY_MIN_SCORE=62
-MARKET_QUALITY_FRESH_MIN_LIQUIDITY_USD=5000
+MARKET_QUALITY_FRESH_MIN_LIQUIDITY_USD=2500
 ```
 
-The bot refreshes market data silently once per minute. It does not post each refresh; commands such as `/new`, `/trending`, and `/report` use the fresh cache and show the last update age. New pairs, trending lists, reports, and group digests are quality-filtered before posting. `/new` defaults to a 1-hour window and has buttons for 10m, 30m, 1h, 6h, 12h, and 1d. The hourly group digest only shows new pairs from the last hour.
+The bot refreshes market data silently once per minute. It does not post each refresh; commands such as `/new`, `/trending`, and `/report` use the fresh cache and show the last update age. New pairs, trending lists, reports, and group digests are quality-filtered before posting. `/new` defaults to a 1-hour window and has buttons for 10m, 30m, 1h, 6h, 12h, and 1d. The hourly group digest only shows new pairs from the last hour. Posted token rows show market cap and liquidity; volume is kept as a hidden scoring signal.
 
 Optional deeper Solana Tracker risk checks:
 
@@ -78,7 +79,7 @@ ENABLE_AUTO_CA_SCAN=false
 ENABLE_IMMEDIATE_GROUP_ALERTS=false
 ```
 
-Repeated group commands/buttons are ignored until 10 new chat messages appear. The only proactive group post is one clean hourly digest with trending coins, group tracked coins, watched wallets, new pairs, and high-volume tokens.
+Repeated group commands/buttons are ignored until 10 new chat messages appear. The only proactive group post is one clean hourly digest with trending coins, group tracked coins, watched wallets, new pairs, and quality-momentum tokens.
 
 Partial slash commands are ignored silently. `/w` will not trigger `/watchtoken` or the help menu. Plain words do not run commands in groups/channels; use exact slash commands or buttons.
 

@@ -74,8 +74,8 @@ export const NEW_PAIR_AGE_OPTIONS = [
 ];
 
 export const NEW_PAIR_DEFAULT_FILTERS = {
-  minLiquidityUsd: 10_000,
-  freshMinLiquidityUsd: 5_000,
+  minLiquidityUsd: 5_000,
+  freshMinLiquidityUsd: 2_500,
   minVolumeUsd: 20_000,
   freshMinVolumeUsd: 8_000,
   minMarketCapUsd: 20_000,

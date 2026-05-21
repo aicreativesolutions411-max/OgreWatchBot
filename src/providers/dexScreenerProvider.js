@@ -228,6 +228,9 @@ export class DexScreenerProvider {
     const sorted = sortScoredPairsForTrend(qualified, kind).slice(0, 10).map(({ pair, quality }) => withQuality({
       ca: pair.baseTokenAddress || pair.pairAddress,
       symbol: pair.symbol,
+      marketCapUsd: pair.marketCapUsd,
+      liquidityUsd: pair.liquidityUsd,
+      ageMinutes: pair.ageMinutes,
       movePercent: trendPercent(pair, kind),
       reason: trendReason(pair, kind)
     }, quality));
@@ -389,10 +392,11 @@ function pairPassesNewPairFilters(pair, filters = NEW_PAIR_DEFAULT_FILTERS) {
 }
 
 function isFreshPotentialPair(pair) {
-  const buyPressure5m = pair.buys5m >= 8 && pair.buys5m >= pair.sells5m * 1.35;
-  const buyPressure1h = pair.buys1h >= 18 && pair.buys1h >= pair.sells1h * 1.25;
-  const marketCapMove = pair.priceChange5m >= 8 || pair.priceChange1h >= 15;
-  const activeVolume = pair.volume5mUsd >= 5_000 || pair.volume1hUsd >= 10_000;
+  const earlyLowLiquidity = pair.liquidityUsd < 5_000;
+  const buyPressure5m = pair.buys5m >= (earlyLowLiquidity ? 12 : 8) && pair.buys5m >= pair.sells5m * (earlyLowLiquidity ? 1.6 : 1.35);
+  const buyPressure1h = pair.buys1h >= (earlyLowLiquidity ? 25 : 18) && pair.buys1h >= pair.sells1h * (earlyLowLiquidity ? 1.45 : 1.25);
+  const marketCapMove = pair.priceChange5m >= (earlyLowLiquidity ? 12 : 8) || pair.priceChange1h >= (earlyLowLiquidity ? 22 : 15);
+  const activeVolume = pair.volume5mUsd >= (earlyLowLiquidity ? 8_000 : 5_000) || pair.volume1hUsd >= (earlyLowLiquidity ? 16_000 : 10_000);
   const saneLiquidity = pair.marketCapUsd > 0 && pair.liquidityUsd / pair.marketCapUsd >= 0.035;
   return (buyPressure5m || buyPressure1h) && marketCapMove && activeVolume && saneLiquidity;
 }
@@ -442,11 +446,11 @@ function trendPercent(pair, kind) {
 }
 
 function trendReason(pair, kind) {
-  if (kind === '24h') return `$${Math.round(pair.volume24hUsd).toLocaleString('en-US')} 24h volume`;
+  if (kind === '24h') return 'MC and liquidity momentum';
   if (kind === 'bought') return `${pair.buys5m} buys / ${pair.sells5m} sells in 5m`;
   if (kind === 'lowcaps') return `$${Math.round(pair.marketCapUsd).toLocaleString('en-US')} market cap`;
-  if (kind === '1h') return `$${Math.round(pair.volume1hUsd).toLocaleString('en-US')} 1h volume`;
-  return `$${Math.round(pair.volume5mUsd).toLocaleString('en-US')} 5m volume`;
+  if (kind === '1h') return '1h MC momentum';
+  return 'MC momentum';
 }
 
 function trendRank(pair, kind) {
@@ -462,7 +466,7 @@ function trendLabel(kind) {
   const labels = {
     '5m': '5m Movers',
     '1h': '1h Movers',
-    '24h': '24h Volume',
+    '24h': '24h Momentum',
     lowcaps: 'New Low Caps',
     bought: 'Most Bought',
     watched: 'Watched by Users'

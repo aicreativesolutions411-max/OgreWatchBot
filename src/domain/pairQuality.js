@@ -1,6 +1,6 @@
 const DEFAULT_MIN_SCORE = 62;
 const DEFAULT_MAX_RISK_SCORE = 7;
-const DEFAULT_FRESH_MIN_LIQUIDITY_USD = 5_000;
+const DEFAULT_FRESH_MIN_LIQUIDITY_USD = 2_500;
 
 export function scorePair(pair, options = {}) {
   const minScore = numberOption(options.marketQualityMinScore, DEFAULT_MIN_SCORE);
@@ -196,10 +196,11 @@ function isBlocked({ score, minScore, warnings, externalRisk, marketCapUsd, liqu
 function isFreshPotential({ liquidityUsd, marketCapUsd, volume5mUsd, volume1hUsd, buys5m, sells5m, buys1h, sells1h, priceChange5m, priceChange1h, ageMinutes }) {
   if (ageMinutes == null || ageMinutes > 60) return false;
   if (marketCapUsd <= 0 || liquidityUsd <= 0) return false;
-  const buyPressure5m = buys5m >= 8 && buys5m >= sells5m * 1.35;
-  const buyPressure1h = buys1h >= 18 && buys1h >= sells1h * 1.25;
-  const marketCapMove = priceChange5m >= 8 || priceChange1h >= 15;
-  const activeVolume = volume5mUsd >= 5_000 || volume1hUsd >= 10_000;
+  const earlyLowLiquidity = liquidityUsd < 5_000;
+  const buyPressure5m = buys5m >= (earlyLowLiquidity ? 12 : 8) && buys5m >= sells5m * (earlyLowLiquidity ? 1.6 : 1.35);
+  const buyPressure1h = buys1h >= (earlyLowLiquidity ? 25 : 18) && buys1h >= sells1h * (earlyLowLiquidity ? 1.45 : 1.25);
+  const marketCapMove = priceChange5m >= (earlyLowLiquidity ? 12 : 8) || priceChange1h >= (earlyLowLiquidity ? 22 : 15);
+  const activeVolume = volume5mUsd >= (earlyLowLiquidity ? 8_000 : 5_000) || volume1hUsd >= (earlyLowLiquidity ? 16_000 : 10_000);
   const saneLiquidity = liquidityUsd / marketCapUsd >= 0.035;
   return (buyPressure5m || buyPressure1h) && marketCapMove && activeVolume && saneLiquidity;
 }

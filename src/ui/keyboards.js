@@ -73,7 +73,7 @@ export function newPairsKeyboard(activeAgeMinutes = 60) {
 export function trendingKeyboard() {
   return inlineKeyboard([
     [callbackButton('5m Movers', 'trending:5m'), callbackButton('1h Movers', 'trending:1h')],
-    [callbackButton('24h Volume', 'trending:24h'), callbackButton('New Low Caps', 'trending:lowcaps')],
+    [callbackButton('24h Momentum', 'trending:24h'), callbackButton('New Low Caps', 'trending:lowcaps')],
     [callbackButton('Most Bought', 'trending:bought'), callbackButton('Watched by Users', 'trending:watched')]
   ]);
 }

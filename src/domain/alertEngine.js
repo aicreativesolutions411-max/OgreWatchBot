@@ -190,6 +190,7 @@ export class AlertEngine {
       this.provider.getTrending('24h'),
       this.provider.getNewPairs({
         ...NEW_PAIR_DEFAULT_FILTERS,
+        minLiquidityUsd: this.config.newPairMinLiquidityUsd ?? NEW_PAIR_DEFAULT_FILTERS.minLiquidityUsd,
         freshMinLiquidityUsd: this.config.newPairFreshMinLiquidityUsd ?? NEW_PAIR_DEFAULT_FILTERS.freshMinLiquidityUsd,
         freshMinVolumeUsd: this.config.newPairFreshMinVolumeUsd ?? NEW_PAIR_DEFAULT_FILTERS.freshMinVolumeUsd,
         maxAgeMinutes: 60
