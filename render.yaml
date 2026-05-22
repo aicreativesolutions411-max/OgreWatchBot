@@ -67,6 +67,8 @@ services:
         value: 30
       - key: COMMAND_GATE_MESSAGES
         value: 10
+      - key: PANEL_REUSE_MINUTES
+        value: 60
       - key: ENABLE_AUTO_CA_SCAN
         value: false
       - key: ENABLE_IMMEDIATE_GROUP_ALERTS
@@ -76,9 +78,9 @@ services:
       - key: DEXSCREENER_API_BASE
         value: https://api.dexscreener.com
       - key: DEXSCREENER_SEARCH_QUERIES
-        value: SOL/USDC,SOL,pump,raydium
+        value: SOL/USDC,SOL,pump,pumpfun,raydium,meteora,moonshot,bonk
       - key: DEXSCREENER_MAX_TOKENS
-        value: 30
+        value: 120
       - key: NEW_PAIR_DEFAULT_AGE_MINUTES
         value: 60
       - key: NEW_PAIR_MIN_LIQUIDITY_USD

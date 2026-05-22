@@ -110,10 +110,11 @@ Render defaults to live market data:
 DATA_PROVIDER=dexscreener
 MARKET_REFRESH_INTERVAL_SECONDS=60
 DEXSCREENER_API_BASE=https://api.dexscreener.com
-DEXSCREENER_SEARCH_QUERIES=SOL/USDC,SOL,pump,raydium
+DEXSCREENER_SEARCH_QUERIES=SOL/USDC,SOL,pump,pumpfun,raydium,meteora,moonshot,bonk
+DEXSCREENER_MAX_TOKENS=120
 ```
 
-The bot refreshes DEX Screener data silently in the background every minute. It does not post each refresh. Commands like `/new`, `/trending`, `/report`, and token scans read from the latest cache and show a data freshness line. If the API is temporarily unavailable, the bot keeps running and falls back to mock data instead of hanging commands.
+The bot refreshes DEX Screener data silently in the background every minute. It does not post each refresh. Commands like `/new`, `/trending`, `/report`, and token scans read from the latest cache. If the API is temporarily unavailable, the bot keeps running and falls back to mock data instead of hanging commands.
 
 ## Quality And Rug Filter
 
@@ -147,11 +148,12 @@ Group command/button spam is gated by message flow:
 
 ```text
 COMMAND_GATE_MESSAGES=10
+PANEL_REUSE_MINUTES=60
 ENABLE_AUTO_CA_SCAN=false
 ENABLE_IMMEDIATE_GROUP_ALERTS=false
 ```
 
-In groups and channels, repeating the same command or button will not post again until 10 new chat messages have appeared. DMs are not gated. The bot does not auto-scan posted contracts by default; users must click or send commands. The only proactive group post is the hourly digest.
+In groups and channels, repeating the same typed command will not post again until 10 new chat messages have appeared. Button clicks edit the same bot panel instead of posting new messages. When someone types a command, the bot reuses the last panel for 60 minutes when possible; after that it posts a fresh panel. DMs are not command-gated. The bot does not auto-scan posted contracts by default; users must click or send commands. The only proactive group post is the hourly digest.
 
 Commands must be typed in full. Partial commands such as `/w` are ignored silently and do not post the help menu. Plain words like `new`, `ping`, or `backup` do not trigger group/channel replies; users must send the exact slash command, for example `/new`, or click a button.
 

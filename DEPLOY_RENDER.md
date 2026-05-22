@@ -49,7 +49,8 @@ Live market refresh is also included:
 DATA_PROVIDER=dexscreener
 MARKET_REFRESH_INTERVAL_SECONDS=60
 DEXSCREENER_API_BASE=https://api.dexscreener.com
-DEXSCREENER_SEARCH_QUERIES=SOL/USDC,SOL,pump,raydium
+DEXSCREENER_SEARCH_QUERIES=SOL/USDC,SOL,pump,pumpfun,raydium,meteora,moonshot,bonk
+DEXSCREENER_MAX_TOKENS=120
 NEW_PAIR_DEFAULT_AGE_MINUTES=60
 NEW_PAIR_MIN_LIQUIDITY_USD=5000
 NEW_PAIR_FRESH_MIN_LIQUIDITY_USD=2500
@@ -77,11 +78,12 @@ Group anti-spam is included:
 
 ```text
 COMMAND_GATE_MESSAGES=10
+PANEL_REUSE_MINUTES=60
 ENABLE_AUTO_CA_SCAN=false
 ENABLE_IMMEDIATE_GROUP_ALERTS=false
 ```
 
-Repeated group commands/buttons are ignored until 10 new chat messages appear. The only proactive group post is one clean hourly digest with trending coins, group tracked coins, watched wallets, new pairs, and quality-momentum tokens.
+Repeated typed group commands are ignored until 10 new chat messages appear. Button clicks edit the same bot panel instead of posting a new message, and typed menu commands reuse the last panel for 60 minutes when possible. The only proactive group post is one clean hourly digest with trending coins, group tracked coins, watched wallets, new pairs, and quality-momentum tokens.
 
 Partial slash commands are ignored silently. `/w` will not trigger `/watchtoken` or the help menu. Plain words do not run commands in groups/channels; use exact slash commands or buttons.
 

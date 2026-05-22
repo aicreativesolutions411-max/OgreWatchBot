@@ -11,7 +11,8 @@ const EMPTY_DATA = {
     lastUserDigestAt: {},
     lastDailyReportAt: {},
     chatMessageCounts: {},
-    chatActionGates: {}
+    chatActionGates: {},
+    chatPanels: {}
   },
   users: {},
   groups: {},
@@ -111,6 +112,26 @@ export class JsonStore {
   setChatActionGate(chatId, actionKey, messageCount) {
     this.data.meta.chatActionGates ??= {};
     this.data.meta.chatActionGates[`${chatId}:${actionKey}`] = messageCount;
+    this.save();
+  }
+
+  getChatPanel(chatId) {
+    this.data.meta.chatPanels ??= {};
+    return this.data.meta.chatPanels[String(chatId)] ?? null;
+  }
+
+  setChatPanel(chatId, messageId) {
+    this.data.meta.chatPanels ??= {};
+    this.data.meta.chatPanels[String(chatId)] = {
+      messageId,
+      updatedAtMs: Date.now()
+    };
+    this.save();
+  }
+
+  clearChatPanel(chatId) {
+    this.data.meta.chatPanels ??= {};
+    delete this.data.meta.chatPanels[String(chatId)];
     this.save();
   }
 

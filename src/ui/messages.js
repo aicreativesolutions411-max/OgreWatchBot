@@ -218,6 +218,10 @@ export function scanMessage(scan, config) {
 
 export function newPairsMessage(pairs, config = {}, status = null, filters = NEW_PAIR_DEFAULT_FILTERS) {
   const lines = [`🆕 <b>New Solana Pairs (${ageWindowLabel(filters.maxAgeMinutes)})</b>`, ''];
+  if (filters.requestedMaxAgeMinutes && filters.requestedMaxAgeMinutes !== filters.maxAgeMinutes) {
+    lines.push(`No clean ${ageWindowLabel(filters.requestedMaxAgeMinutes)} setups passed, so this view expanded to ${ageWindowLabel(filters.maxAgeMinutes)}.`);
+    lines.push('');
+  }
   lines.push(...marketStatusLines(status));
   if (status) lines.push('');
   pairs.forEach((pair, index) => {
@@ -455,7 +459,7 @@ function pushTopPickRows(lines, picks = [], config = {}) {
     return;
   }
 
-  picks.slice(0, 5).forEach((pick, index) => {
+  picks.slice(0, 8).forEach((pick, index) => {
     const move = Number.isFinite(Number(pick.movePercent)) ? ` ${percent(pick.movePercent)}` : '';
     const age = Number.isFinite(Number(pick.ageMinutes)) ? ` | Age: ${minutesAgo(pick.ageMinutes)}` : '';
     lines.push(`${index + 1}. <b>${tokenLink(pick.symbol, pick.ca, config)}</b>${move} - <b>${setupLabel(pick)}</b>`);

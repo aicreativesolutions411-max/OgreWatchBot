@@ -303,7 +303,9 @@ export class RadarBot {
         await this.commandReport(message.chat.id);
         break;
       case '/help':
-        await this.telegram.sendMessage(message.chat.id, helpMessage(this.config));
+        await this.sendOrEdit(message.chat.id, null, helpMessage(this.config), mainMenuKeyboard({
+          showAdmin: await this.shouldShowAdminControls(message)
+        }));
         break;
       case '/backup':
         await this.commandBackup(message);
@@ -335,15 +337,6 @@ export class RadarBot {
     const userId = callback.from.id;
 
     this.store.ensureUser(callback.from, callback.message.chat.type === 'private' ? chatId : userId);
-    const actionGate = this.chatActionGate(message.chat, callbackActionKey(data));
-    if (!actionGate.allowed) {
-      await this.telegram.answerCallbackQuery(callback.id, {
-        text: `Wait for ${actionGate.remaining} more chat messages before repeating this.`,
-        show_alert: false
-      }).catch(() => {});
-      return null;
-    }
-
     await this.telegram.answerCallbackQuery(callback.id).catch(() => {});
 
     if (data === 'menu:start') {
@@ -389,44 +382,81 @@ export class RadarBot {
   }
 
   async sendStart(chatId, showAdmin = false) {
-    await this.telegram.sendMessage(chatId, mainMenuMessage(this.config), mainMenuKeyboard({ showAdmin }));
+    await this.sendOrEdit(chatId, null, mainMenuMessage(this.config), mainMenuKeyboard({ showAdmin }));
   }
 
   async editMenu(chatId, messageId, showAdmin = false) {
-    await this.telegram.editMessageText(chatId, messageId, mainMenuMessage(this.config), mainMenuKeyboard({ showAdmin }));
+    await this.sendOrEdit(chatId, messageId, mainMenuMessage(this.config), mainMenuKeyboard({ showAdmin }));
   }
 
   async sendOrEdit(chatId, messageId, text, options = {}) {
-    if (!messageId) {
-      return this.telegram.sendMessage(chatId, text, options);
+    const {
+      recordPanel = true,
+      reusePanel = true,
+      ...telegramOptions
+    } = options;
+    const panelMessageId = messageId ?? (reusePanel ? this.reusablePanelMessageId(chatId) : null);
+
+    if (!panelMessageId) {
+      const result = await this.telegram.sendMessage(chatId, text, telegramOptions);
+      if (recordPanel) this.recordChatPanel(chatId, result);
+      return result;
     }
 
     try {
-      return await this.telegram.editMessageText(chatId, messageId, text, options);
+      const result = await this.telegram.editMessageText(chatId, panelMessageId, text, telegramOptions);
+      if (recordPanel) this.recordChatPanel(chatId, result ?? { message_id: panelMessageId });
+      return result;
     } catch (error) {
-      console.warn(`[edit-message] ${chatId}:${messageId} ${error.message}`);
-      return null;
+      console.warn(`[edit-message] ${chatId}:${panelMessageId} ${error.message}`);
+      if (isMessageNotModifiedError(error)) {
+        if (recordPanel) this.store.setChatPanel(chatId, panelMessageId);
+        return null;
+      }
+      if (messageId) return null;
+
+      this.store.clearChatPanel(chatId);
+      const result = await this.telegram.sendMessage(chatId, text, telegramOptions);
+      if (recordPanel) this.recordChatPanel(chatId, result);
+      return result;
     }
+  }
+
+  reusablePanelMessageId(chatId) {
+    if (this.config.panelReuseMinutes <= 0) return null;
+    const panel = this.store.getChatPanel(chatId);
+    const messageId = Number(panel?.messageId);
+    const updatedAtMs = Number(panel?.updatedAtMs);
+    if (!Number.isFinite(messageId) || !Number.isFinite(updatedAtMs)) return null;
+    const maxAgeMs = this.config.panelReuseMinutes * 60 * 1000;
+    if (Date.now() - updatedAtMs > maxAgeMs) return null;
+    return messageId;
+  }
+
+  recordChatPanel(chatId, result) {
+    const messageId = Number(result?.message_id);
+    if (!Number.isFinite(messageId)) return;
+    this.store.setChatPanel(chatId, messageId);
   }
 
   async commandWatchToken(message, args) {
     const ca = args[0];
     if (!ca || !looksLikeSolanaAddress(ca)) {
-      await this.telegram.sendMessage(message.chat.id, usageMessage('/watchtoken CA', '/watchtoken So11111111111111111111111111111111111111112'));
+      await this.sendOrEdit(message.chat.id, null, usageMessage('/watchtoken CA', '/watchtoken So11111111111111111111111111111111111111112'), tokenDeepDiveKeyboard());
       return;
     }
 
-    await this.telegram.sendMessage(message.chat.id, askTokenOptionsMessage(ca, this.config), tokenOptionsKeyboard(ca));
+    await this.sendOrEdit(message.chat.id, null, askTokenOptionsMessage(ca, this.config), tokenOptionsKeyboard(ca));
   }
 
   async commandWatchWallet(message, args) {
     const wallet = args[0];
     if (!wallet || !looksLikeSolanaAddress(wallet)) {
-      await this.telegram.sendMessage(message.chat.id, usageMessage('/watchwallet walletaddress', '/watchwallet So11111111111111111111111111111111111111112'));
+      await this.sendOrEdit(message.chat.id, null, usageMessage('/watchwallet walletaddress', '/watchwallet So11111111111111111111111111111111111111112'), walletIntelKeyboard());
       return;
     }
 
-    await this.telegram.sendMessage(message.chat.id, askWalletOptionsMessage(wallet, this.config), walletOptionsKeyboard(wallet));
+    await this.sendOrEdit(message.chat.id, null, askWalletOptionsMessage(wallet, this.config), walletOptionsKeyboard(wallet));
   }
 
   async commandUntrack(message, args, kind = 'any') {
@@ -435,7 +465,7 @@ export class RadarBot {
       const usage = kind === 'wallet'
         ? usageMessage('/untrackwallet walletaddress', '/untrackwallet So11111111111111111111111111111111111111112')
         : usageMessage(kind === 'token' ? '/untrackcoin CA_OR_TICKER' : '/untrack CA_OR_TICKER_OR_WALLET', kind === 'token' ? '/untrackcoin $OGRE' : '/untrack $OGRE');
-      await this.telegram.sendMessage(message.chat.id, usage);
+      await this.sendOrEdit(message.chat.id, null, usage);
       return;
     }
 
@@ -463,10 +493,10 @@ export class RadarBot {
 
     if (!tokenResult.removed && !walletResult.removed) {
       if (tokenResult.adminBlocked || walletResult.adminBlocked) {
-        await this.telegram.sendMessage(message.chat.id, untrackAdminRequiredMessage(query));
+        await this.sendOrEdit(message.chat.id, null, untrackAdminRequiredMessage(query));
         return;
       }
-      await this.telegram.sendMessage(message.chat.id, untrackNotFoundMessage(query, 'watch'));
+      await this.sendOrEdit(message.chat.id, null, untrackNotFoundMessage(query, 'watch'));
     }
   }
 
@@ -477,15 +507,16 @@ export class RadarBot {
       return;
     }
 
-    await this.telegram.sendMessage(
+    await this.sendOrEdit(
       message.chat.id,
+      null,
       result.adminBlocked ? untrackAdminRequiredMessage(query) : untrackNotFoundMessage(query, 'coin watch')
     );
   }
 
   async commandUntrackWallet(message, wallet, context) {
     if (!looksLikeSolanaAddress(wallet)) {
-      await this.telegram.sendMessage(message.chat.id, usageMessage('/untrackwallet walletaddress', '/untrackwallet So11111111111111111111111111111111111111112'));
+      await this.sendOrEdit(message.chat.id, null, usageMessage('/untrackwallet walletaddress', '/untrackwallet So11111111111111111111111111111111111111112'));
       return;
     }
 
@@ -495,8 +526,9 @@ export class RadarBot {
       return;
     }
 
-    await this.telegram.sendMessage(
+    await this.sendOrEdit(
       message.chat.id,
+      null,
       result.adminBlocked ? untrackAdminRequiredMessage(wallet) : untrackNotFoundMessage(wallet, 'wallet watch')
     );
   }
@@ -555,7 +587,7 @@ export class RadarBot {
   }
 
   async sendUntrackTokenResult(chatId, result) {
-    await this.telegram.sendMessage(chatId, untrackTokenMessage({
+    await this.sendOrEdit(chatId, null, untrackTokenMessage({
       ca: result.ca,
       symbol: result.symbol,
       removedFrom: result.removedFrom,
@@ -564,7 +596,7 @@ export class RadarBot {
   }
 
   async sendUntrackWalletResult(chatId, result) {
-    await this.telegram.sendMessage(chatId, untrackWalletMessage({
+    await this.sendOrEdit(chatId, null, untrackWalletMessage({
       wallet: result.wallet,
       label: result.label,
       removedFrom: result.removedFrom,
@@ -622,12 +654,12 @@ export class RadarBot {
   async commandScan(chatId, args) {
     const ca = args[0];
     if (!ca || !looksLikeSolanaAddress(ca)) {
-      await this.telegram.sendMessage(chatId, tokenDeepDiveMenuMessage(this.config), tokenDeepDiveKeyboard());
+      await this.sendOrEdit(chatId, null, tokenDeepDiveMenuMessage(this.config), tokenDeepDiveKeyboard());
       return;
     }
 
     const scan = await this.provider.scanToken(ca);
-    await this.telegram.sendMessage(chatId, scanMessage(scan, this.config), actionButtons(this.config, scan.ca ?? ca));
+    await this.sendOrEdit(chatId, null, scanMessage(scan, this.config), actionButtons(this.config, scan.ca ?? ca));
   }
 
   async commandPaidBoosts(chatId, options = {}) {
@@ -668,14 +700,42 @@ export class RadarBot {
       freshMinVolumeUsd: this.config.newPairFreshMinVolumeUsd ?? NEW_PAIR_DEFAULT_FILTERS.freshMinVolumeUsd,
       maxAgeMinutes
     };
-    const pairs = await this.provider.getNewPairs(filters);
+    const { pairs, effectiveFilters } = await this.loadNewPairsForWindow(filters);
     this.store.recordTokenCalls(pairs, 'New pairs');
     await this.sendOrEdit(
       chatId,
       options.messageId,
-      newPairsMessage(pairs, this.config, this.provider.marketStatus?.(), filters),
+      newPairsMessage(pairs, this.config, this.provider.marketStatus?.(), effectiveFilters),
       newPairsKeyboard(maxAgeMinutes)
     );
+  }
+
+  async loadNewPairsForWindow(filters) {
+    let pairs = await this.provider.getNewPairs(filters);
+    if (pairs.length || Number(filters.maxAgeMinutes) >= 1440) {
+      return { pairs, effectiveFilters: filters };
+    }
+
+    const requestedMaxAgeMinutes = filters.maxAgeMinutes;
+    const widerWindows = NEW_PAIR_AGE_OPTIONS
+      .map((option) => option.minutes)
+      .filter((minutes) => minutes > requestedMaxAgeMinutes);
+
+    for (const maxAgeMinutes of widerWindows) {
+      const widerFilters = { ...filters, maxAgeMinutes };
+      pairs = await this.provider.getNewPairs(widerFilters);
+      if (pairs.length) {
+        return {
+          pairs,
+          effectiveFilters: {
+            ...widerFilters,
+            requestedMaxAgeMinutes
+          }
+        };
+      }
+    }
+
+    return { pairs, effectiveFilters: filters };
   }
 
   async commandTrending(chatId, kind, options = {}) {
@@ -687,7 +747,7 @@ export class RadarBot {
   async commandPortfolio(chatId, args, options = {}) {
     const wallet = args[0];
     if (!wallet || !looksLikeSolanaAddress(wallet)) {
-      await this.telegram.sendMessage(chatId, usageMessage('/portfolio walletaddress', '/portfolio So11111111111111111111111111111111111111112'));
+      await this.sendOrEdit(chatId, null, usageMessage('/portfolio walletaddress', '/portfolio So11111111111111111111111111111111111111112'), walletIntelKeyboard());
       return;
     }
 
@@ -715,13 +775,13 @@ export class RadarBot {
 
   async commandGroupSettings(message, options = {}) {
     if (message.chat.type === 'private') {
-      await this.telegram.sendMessage(message.chat.id, 'Group settings are available inside a group where you are an admin.');
+      await this.sendOrEdit(message.chat.id, null, 'Group settings are available inside a group where you are an admin.', mainMenuKeyboard());
       return;
     }
 
     const isAdmin = await this.isMessageFromChatAdmin(message);
     if (!isAdmin) {
-      await this.telegram.sendMessage(message.chat.id, 'Only group admins can change group alert settings.');
+      await this.sendOrEdit(message.chat.id, null, 'Only group admins can change group alert settings.', mainMenuKeyboard());
       return;
     }
 
@@ -848,7 +908,7 @@ export class RadarBot {
   async callbackAlertMode(chatId, messageId, userId, data) {
     const mode = data.split(':')[1];
     const user = this.store.setUserAlertMode(userId, mode);
-    await this.telegram.editMessageText(chatId, messageId, alertPrefsMessage(user), alertPrefsKeyboard(user.settings.alertMode));
+    await this.sendOrEdit(chatId, messageId, alertPrefsMessage(user), alertPrefsKeyboard(user.settings.alertMode));
   }
 
   async callbackWatchToken(chat, userId, data, messageId = null) {
@@ -931,7 +991,7 @@ export class RadarBot {
       group = this.store.setGroupCooldown(message.chat.id, next);
     }
 
-    await this.telegram.editMessageText(
+    await this.sendOrEdit(
       message.chat.id,
       message.message_id,
       groupSettingsMessage(group, this.config),
@@ -1247,28 +1307,8 @@ function commandActionKey(command, args = []) {
   return keys[command] ?? `command:${command}:${args.slice(0, 2).join(':')}`;
 }
 
-function callbackActionKey(data = '') {
-  if (data === 'menu:start') return 'menu:start';
-  if (data === 'menu:alpha') return 'menu:alpha';
-  if (data === 'menu:deepdive') return 'menu:deepdive';
-  if (data === 'menu:walletintel') return 'menu:walletintel';
-  if (data === 'menu:help') return 'help';
-  if (data === 'alpha:boosts') return 'market:boosts';
-  if (data === 'alpha:filters') return 'market:new:filters';
-  if (data.startsWith('topcalls:')) return `topcalls:${data.split(':')[1] ?? '1d'}`;
-  if (data.startsWith('deepdive:')) return data;
-  if (data.startsWith('walletintel:')) return data;
-  if (data === 'menu:new') return 'market:new';
-  if (data.startsWith('new:age:')) return `market:${data}`;
-  if (data.startsWith('new:')) return data === 'new:filters' ? 'market:new:filters' : 'market:new';
-  if (data === 'menu:trending') return 'market:trending:5m';
-  if (data.startsWith('trending:')) return `market:trending:${data.split(':')[1] ?? '5m'}`;
-  if (data === 'menu:report') return 'market:report';
-  if (data === 'menu:alerts') return 'menu:alerts';
-  if (data === 'menu:watchlist') return 'menu:watchlist';
-  if (data === 'menu:groupsettings') return 'group:settings';
-  if (data.startsWith('portfolio:')) return `portfolio:${data.split(':')[1] ?? ''}`;
-  return `callback:${data}`;
+function isMessageNotModifiedError(error) {
+  return String(error?.message ?? '').toLowerCase().includes('message is not modified');
 }
 
 function looseTextCommand(text) {

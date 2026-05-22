@@ -4,7 +4,21 @@ import { SolanaTrackerRiskProvider } from './solanaTrackerRiskProvider.js';
 import { tokenSymbolFromAddress } from '../utils/solana.js';
 
 const SOLANA_CHAIN_ID = 'solana';
-const DEFAULT_SEARCH_QUERIES = ['SOL/USDC', 'SOL', 'pump', 'raydium'];
+const DEFAULT_SEARCH_QUERIES = ['SOL/USDC', 'SOL', 'pump', 'pumpfun', 'raydium', 'meteora', 'moonshot', 'bonk'];
+const PAIR_CACHE_MAX_AGE_MINUTES = 1440;
+const STALE_UNKNOWN_AGE_TTL_MS = 2 * 60 * 60 * 1000;
+const TARGET_RESULT_COUNT = 8;
+const RELAXED_MIN_SCORE = 56;
+const HARD_RISK_WARNINGS = new Set([
+  'rugged status',
+  'bundle/snipe pattern',
+  'no sells after heavy buying',
+  'heavy sell pressure',
+  'liquidity too thin for MC',
+  'volume looks noisy vs liquidity',
+  'extreme spike already',
+  'too new to trust'
+]);
 
 export class DexScreenerProvider {
   constructor(config, fallbackProvider) {
@@ -145,6 +159,27 @@ export class DexScreenerProvider {
   }
 
   #replacePairs(pairs) {
+    const now = Date.now();
+    const merged = new Map();
+
+    for (const pair of this.pairsByAddress.values()) {
+      const refreshed = refreshPairAge(pair, now);
+      if (shouldKeepCachedPair(refreshed, now)) {
+        merged.set(refreshed.pairAddress, refreshed);
+      }
+    }
+
+    for (const pair of pairs) {
+      const refreshed = refreshPairAge({ ...pair, seenAtMs: now }, now);
+      if (refreshed.pairAddress) {
+        merged.set(refreshed.pairAddress, refreshed);
+      }
+    }
+
+    this.#rebuildPairIndexes([...merged.values()]);
+  }
+
+  #rebuildPairIndexes(pairs) {
     const byAddress = new Map();
     const byToken = new Map();
 
@@ -213,11 +248,13 @@ export class DexScreenerProvider {
     const basePairs = [...this.pairsByAddress.values()]
       .filter((pair) => pair.ageMinutes != null)
       .filter((pair) => pairPassesNewPairFilters(pair, filters));
+    const relaxedPairs = [...this.pairsByAddress.values()]
+      .filter((pair) => pair.ageMinutes != null)
+      .filter((pair) => pairPassesNewPairFilters(pair, relaxedNewPairFilters(filters)));
+    const candidatePairs = uniquePairs([...basePairs, ...relaxedPairs]);
 
-    const scored = await this.#scorePairs(basePairs);
-    const pairs = this.#qualityFilter(scored)
-      .sort((a, b) => b.quality.score - a.quality.score || a.pair.ageMinutes - b.pair.ageMinutes)
-      .slice(0, 10)
+    const scored = await this.#scorePairs(candidatePairs);
+    const pairs = selectAlphaPairs(scored, basePairs, TARGET_RESULT_COUNT)
       .map(({ pair, quality }) => pairToNewPair(pair, quality));
 
     if (this.pairsByAddress.size > 0) return pairs;
@@ -231,7 +268,10 @@ export class DexScreenerProvider {
     const scored = await this.#scorePairs(pairs);
     const qualified = this.#qualityFilter(scored)
       .filter(({ pair }) => pairIsFreshOrSpiking(pair, kind));
-    const sorted = sortScoredPairsForTrend(qualified, kind).slice(0, 10).map(({ pair, quality }) => withQuality({
+    const relaxed = scored
+      .filter(({ quality }) => cleanDisplayCandidate(quality))
+      .filter(({ pair }) => pairHasUsefulSignal(pair, kind));
+    const sorted = sortScoredPairsForTrend(uniqueScoredPairs([...qualified, ...relaxed]), kind).slice(0, TARGET_RESULT_COUNT).map(({ pair, quality }) => withQuality({
       ca: pair.baseTokenAddress || pair.pairAddress,
       symbol: pair.symbol,
       marketCapUsd: pair.marketCapUsd,
@@ -363,6 +403,8 @@ function normalizePair(pair) {
     dexId: pair.dexId ?? '',
     url: pair.url ?? '',
     pairAddress,
+    createdAtMs: Number.isFinite(createdAt) ? createdAt : null,
+    seenAtMs: Date.now(),
     baseTokenAddress,
     quoteTokenAddress,
     symbol,
@@ -384,6 +426,22 @@ function normalizePair(pair) {
     sells24h,
     ageMinutes
   };
+}
+
+function refreshPairAge(pair, now = Date.now()) {
+  const createdAtMs = Number(pair.createdAtMs);
+  if (!Number.isFinite(createdAtMs) || createdAtMs <= 0) return pair;
+  return {
+    ...pair,
+    ageMinutes: Math.max(0, Math.floor((now - createdAtMs) / 60000))
+  };
+}
+
+function shouldKeepCachedPair(pair, now = Date.now()) {
+  const ageMinutes = Number(pair.ageMinutes);
+  if (Number.isFinite(ageMinutes)) return ageMinutes <= PAIR_CACHE_MAX_AGE_MINUTES;
+  const seenAtMs = Number(pair.seenAtMs);
+  return Number.isFinite(seenAtMs) && now - seenAtMs <= STALE_UNKNOWN_AGE_TTL_MS;
 }
 
 function pairToNewPair(pair, quality) {
@@ -419,6 +477,48 @@ function pairPassesNewPairFilters(pair, filters = NEW_PAIR_DEFAULT_FILTERS) {
     && pair.volumeUsd >= minVolumeUsd
     && pair.marketCapUsd >= minMarketCapUsd
     && pair.marketCapUsd <= maxMarketCapUsd;
+}
+
+function relaxedNewPairFilters(filters = NEW_PAIR_DEFAULT_FILTERS) {
+  return {
+    ...filters,
+    minLiquidityUsd: Math.max(1_500, firstFinite(filters.minLiquidityUsd, NEW_PAIR_DEFAULT_FILTERS.minLiquidityUsd) / 2),
+    freshMinLiquidityUsd: Math.max(1_250, firstFinite(filters.freshMinLiquidityUsd, NEW_PAIR_DEFAULT_FILTERS.freshMinLiquidityUsd) / 2),
+    minVolumeUsd: Math.max(5_000, firstFinite(filters.minVolumeUsd, NEW_PAIR_DEFAULT_FILTERS.minVolumeUsd) / 2),
+    freshMinVolumeUsd: Math.max(3_000, firstFinite(filters.freshMinVolumeUsd, NEW_PAIR_DEFAULT_FILTERS.freshMinVolumeUsd) / 2),
+    minMarketCapUsd: Math.max(5_000, firstFinite(filters.minMarketCapUsd, NEW_PAIR_DEFAULT_FILTERS.minMarketCapUsd) / 2),
+    freshMinMarketCapUsd: Math.max(5_000, firstFinite(filters.freshMinMarketCapUsd, NEW_PAIR_DEFAULT_FILTERS.freshMinMarketCapUsd) / 2),
+    maxMarketCapUsd: Math.max(firstFinite(filters.maxMarketCapUsd, NEW_PAIR_DEFAULT_FILTERS.maxMarketCapUsd), 750_000)
+  };
+}
+
+function selectAlphaPairs(scoredPairs, strictPairs, limit = TARGET_RESULT_COUNT) {
+  const strictAddresses = new Set(strictPairs.map((pair) => pair.pairAddress));
+  const primary = scoredPairs.filter(({ pair, quality }) => strictAddresses.has(pair.pairAddress) && quality?.passes);
+  const fallback = scoredPairs.filter(({ pair, quality }) => !strictAddresses.has(pair.pairAddress) && cleanDisplayCandidate(quality));
+
+  return uniqueScoredPairs([...primary, ...fallback])
+    .sort((a, b) => alphaPairRank(b) - alphaPairRank(a))
+    .slice(0, limit);
+}
+
+function alphaPairRank({ pair, quality }) {
+  const score = Number(quality?.score) || 0;
+  const age = Number.isFinite(Number(pair.ageMinutes)) ? Number(pair.ageMinutes) : PAIR_CACHE_MAX_AGE_MINUTES;
+  const freshness = Math.max(0, 180 - Math.min(age, 180)) / 3;
+  const buyPressure = Math.max(0, pair.buys5m - pair.sells5m) * 1.4 + Math.max(0, pair.buys1h - pair.sells1h) * 0.4;
+  const move = Math.max(0, Math.min(Number(pair.priceChange5m || pair.priceChange1h || 0), 140));
+  const liqMc = pair.marketCapUsd > 0 ? Math.min((pair.liquidityUsd / pair.marketCapUsd) * 80, 30) : 0;
+  return score * 2 + freshness + buyPressure + move + liqMc;
+}
+
+function cleanDisplayCandidate(quality) {
+  if (!quality) return false;
+  if (quality.passes) return true;
+  if ((Number(quality.score) || 0) < RELAXED_MIN_SCORE) return false;
+  if (quality.externalRisk?.rugged || quality.externalRisk?.dangerFlags?.length) return false;
+  if (Number(quality.externalRisk?.score ?? 0) >= 7) return false;
+  return !(quality.warnings ?? []).some((warning) => HARD_RISK_WARNINGS.has(warning));
 }
 
 function isFreshPotentialPair(pair) {
@@ -459,6 +559,21 @@ function pairIsFreshOrSpiking(pair, kind) {
   return (buySpike5m && mcSpike5m) || (buySpike1h && mcSpike1h);
 }
 
+function pairHasUsefulSignal(pair, kind) {
+  if (!pair || pair.liquidityUsd <= 0 || pair.marketCapUsd <= 0) return false;
+  const ageMinutes = Number(pair.ageMinutes);
+  const isFresh = Number.isFinite(ageMinutes) && ageMinutes <= 1440;
+  const buyPressure = pair.buys5m > pair.sells5m || pair.buys1h >= pair.sells1h * 1.05;
+  const momentum = pair.priceChange5m >= 5 || pair.priceChange1h >= 10 || pair.priceChange24h >= 25;
+  const activity = pair.volume5mUsd >= 3_000 || pair.volume1hUsd >= 8_000 || pair.volume24hUsd >= 25_000;
+
+  if (kind === 'lowcaps' && pair.marketCapUsd > 500_000) return false;
+  if (kind === 'bought') return buyPressure && activity;
+  if (kind === 'volume') return activity && (buyPressure || momentum);
+  if (kind === '24h') return activity && (isFresh || momentum);
+  return (isFresh || momentum) && (buyPressure || activity);
+}
+
 function sortPairsForTrend(pairs, kind) {
   const list = pairs.filter((pair) => pair.liquidityUsd > 0);
   if (kind === '1h') return list.sort((a, b) => b.priceChange1h - a.priceChange1h);
@@ -477,6 +592,30 @@ function sortScoredPairsForTrend(scoredPairs, kind) {
     .map((pair) => byAddress.get(pair.pairAddress))
     .filter(Boolean)
     .sort((a, b) => trendRank(b.pair, kind) - trendRank(a.pair, kind) || b.quality.score - a.quality.score);
+}
+
+function uniqueScoredPairs(items) {
+  const seen = new Set();
+  const uniqueItems = [];
+  for (const item of items) {
+    const key = item?.pair?.pairAddress;
+    if (!key || seen.has(key)) continue;
+    seen.add(key);
+    uniqueItems.push(item);
+  }
+  return uniqueItems;
+}
+
+function uniquePairs(items) {
+  const seen = new Set();
+  const uniqueItems = [];
+  for (const item of items) {
+    const key = item?.pairAddress;
+    if (!key || seen.has(key)) continue;
+    seen.add(key);
+    uniqueItems.push(item);
+  }
+  return uniqueItems;
 }
 
 function trendPercent(pair, kind) {

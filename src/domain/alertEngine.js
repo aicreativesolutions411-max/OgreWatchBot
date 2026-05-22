@@ -200,9 +200,9 @@ export class AlertEngine {
       this.scanTrackedGroupTokens(group)
     ]);
 
-    const trendingTokens = trending.tokens.slice(0, 5);
-    const momentumTokens = highVolume.tokens.slice(0, 5);
-    const freshPairs = newPairs.slice(0, 5);
+    const trendingTokens = trending.tokens.slice(0, 8);
+    const momentumTokens = highVolume.tokens.slice(0, 8);
+    const freshPairs = newPairs.slice(0, 8);
     const topPicks = buildTopPicks({
       trending: trendingTokens,
       momentum: momentumTokens,
@@ -288,7 +288,7 @@ function buildTopPicks({ trending = [], momentum = [], newPairs = [] }) {
 
   return [...picks.values()]
     .sort((a, b) => pickRank(b) - pickRank(a))
-    .slice(0, 5);
+    .slice(0, 8);
 }
 
 function addPick(picks, item, source) {
