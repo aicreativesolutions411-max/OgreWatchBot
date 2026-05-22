@@ -198,10 +198,21 @@ export class AlertEngine {
       this.scanTrackedGroupTokens(group)
     ]);
 
+    const trendingTokens = trending.tokens.slice(0, 5);
+    const momentumTokens = highVolume.tokens.slice(0, 5);
+    const freshPairs = newPairs.slice(0, 5);
+    const topPicks = buildTopPicks({
+      trending: trendingTokens,
+      momentum: momentumTokens,
+      newPairs: freshPairs
+    });
+    const topPickKeys = new Set(topPicks.map((pick) => pick.ca || pick.symbol).filter(Boolean));
+
     return {
-      trending: trending.tokens.slice(0, 5),
-      highVolume: highVolume.tokens.slice(0, 5),
-      newPairs: newPairs.slice(0, 5),
+      topPicks,
+      trending: trendingTokens,
+      highVolume: momentumTokens,
+      newPairs: freshPairs.filter((pair) => !topPickKeys.has(pair.ca || pair.symbol)),
       trackedTokens,
       trackedWallets: Object.values(group.watchWallets ?? {}).slice(0, 5)
     };
@@ -264,4 +275,45 @@ function tokenWatchAllows(watch, eventType) {
   if (!watch || watch.mode === 'silent') return false;
   if (watch.mode === 'important') return true;
   return watch.mode === eventType || watch.types?.includes(eventType);
+}
+
+function buildTopPicks({ trending = [], momentum = [], newPairs = [] }) {
+  const picks = new Map();
+
+  for (const token of trending) addPick(picks, token, 'Momentum');
+  for (const token of momentum) addPick(picks, token, '24h setup');
+  for (const pair of newPairs) addPick(picks, pair, 'Fresh pair');
+
+  return [...picks.values()]
+    .sort((a, b) => pickRank(b) - pickRank(a))
+    .slice(0, 5);
+}
+
+function addPick(picks, item, source) {
+  const key = item.ca || item.symbol;
+  if (!key) return;
+
+  const existing = picks.get(key);
+  const next = {
+    ...existing,
+    ...item,
+    source: mergeSources(existing?.source, source),
+    movePercent: item.movePercent ?? existing?.movePercent
+  };
+
+  picks.set(key, next);
+}
+
+function mergeSources(current, next) {
+  if (!current) return next;
+  if (current.split(' + ').includes(next)) return current;
+  return `${current} + ${next}`;
+}
+
+function pickRank(item) {
+  const quality = Number(item.qualityScore) || 0;
+  const move = Math.max(0, Number(item.movePercent) || 0);
+  const freshness = Number.isFinite(Number(item.ageMinutes)) ? Math.max(0, 60 - Number(item.ageMinutes)) / 2 : 0;
+  const freshBoost = String(item.source ?? '').includes('Fresh pair') ? 10 : 0;
+  return quality * 2 + Math.min(move, 120) + freshness + freshBoost;
 }

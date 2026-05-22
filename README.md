@@ -132,6 +132,8 @@ The `/new` screen defaults to pairs under 1 hour old and includes buttons for `1
 
 Older pairs are kept out of trending lists unless they are actually spiking, for example strong buy pressure plus market-cap movement. That keeps stale high-volume coins from crowding the feed.
 
+Hourly group updates are ranked as watcher picks: the bot combines fresh pairs, short-term momentum, and 24h setup data, removes duplicates, and posts only the strongest setups with market cap, liquidity, age, source, and a plain-English setup label.
+
 For deeper risk checks, add a Solana Tracker Data API key. Without a key, the bot still uses DexScreener-based heuristics. With a key, it also blocks rugged tokens, high risk scores, danger flags, bundler/insider warnings, mint/freeze authority risks, and other Rugcheck-style signals returned by Solana Tracker.
 
 ```text

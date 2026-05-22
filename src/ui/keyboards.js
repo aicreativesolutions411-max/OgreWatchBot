@@ -93,7 +93,7 @@ export function groupSettingsKeyboard(group) {
 
 export function reportKeyboard() {
   return inlineKeyboard([
-    [callbackButton('View Trending', 'trending:5m'), callbackButton('New Pairs', 'new:refresh')],
+    [callbackButton('5m Movers', 'trending:5m'), callbackButton('Fresh Pairs', 'new:refresh')],
     [callbackButton('Watchlist', 'menu:watchlist')]
   ]);
 }
