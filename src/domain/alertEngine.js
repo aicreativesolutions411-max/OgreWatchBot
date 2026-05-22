@@ -181,6 +181,7 @@ export class AlertEngine {
         hourlyGroupUpdateMessage(update, this.config, this.provider.marketStatus?.()),
         reportKeyboard()
       );
+      console.log(`[digest] hourly posted group=${group.id} picks=${update.topPicks.length} fresh=${update.newPairs.length}`);
       this.store.data.meta.lastGroupDigestAt[group.id] = now;
       this.store.save();
     }

@@ -390,53 +390,19 @@ export class RadarBot {
   }
 
   async sendOrEdit(chatId, messageId, text, options = {}) {
-    const {
-      recordPanel = true,
-      reusePanel = true,
-      ...telegramOptions
-    } = options;
-    const panelMessageId = messageId ?? (reusePanel ? this.reusablePanelMessageId(chatId) : null);
-
-    if (!panelMessageId) {
-      const result = await this.telegram.sendMessage(chatId, text, telegramOptions);
-      if (recordPanel) this.recordChatPanel(chatId, result);
-      return result;
+    if (!messageId) {
+      return this.telegram.sendMessage(chatId, text, options);
     }
 
     try {
-      const result = await this.telegram.editMessageText(chatId, panelMessageId, text, telegramOptions);
-      if (recordPanel) this.recordChatPanel(chatId, result ?? { message_id: panelMessageId });
-      return result;
+      return await this.telegram.editMessageText(chatId, messageId, text, options);
     } catch (error) {
-      console.warn(`[edit-message] ${chatId}:${panelMessageId} ${error.message}`);
+      console.warn(`[edit-message] ${chatId}:${messageId} ${error.message}`);
       if (isMessageNotModifiedError(error)) {
-        if (recordPanel) this.store.setChatPanel(chatId, panelMessageId);
         return null;
       }
-      if (messageId) return null;
-
-      this.store.clearChatPanel(chatId);
-      const result = await this.telegram.sendMessage(chatId, text, telegramOptions);
-      if (recordPanel) this.recordChatPanel(chatId, result);
-      return result;
+      return null;
     }
-  }
-
-  reusablePanelMessageId(chatId) {
-    if (this.config.panelReuseMinutes <= 0) return null;
-    const panel = this.store.getChatPanel(chatId);
-    const messageId = Number(panel?.messageId);
-    const updatedAtMs = Number(panel?.updatedAtMs);
-    if (!Number.isFinite(messageId) || !Number.isFinite(updatedAtMs)) return null;
-    const maxAgeMs = this.config.panelReuseMinutes * 60 * 1000;
-    if (Date.now() - updatedAtMs > maxAgeMs) return null;
-    return messageId;
-  }
-
-  recordChatPanel(chatId, result) {
-    const messageId = Number(result?.message_id);
-    if (!Number.isFinite(messageId)) return;
-    this.store.setChatPanel(chatId, messageId);
   }
 
   async commandWatchToken(message, args) {

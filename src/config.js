@@ -83,7 +83,6 @@ export const config = {
   pollTimeoutSeconds: numberFromEnv('POLL_TIMEOUT_SECONDS', 30),
   alertTickSeconds: numberFromEnv('ALERT_TICK_SECONDS', 30),
   commandGateMessages: numberFromEnv('COMMAND_GATE_MESSAGES', 10),
-  panelReuseMinutes: numberFromEnv('PANEL_REUSE_MINUTES', 60),
   enableAutoCaScan: booleanFromEnv('ENABLE_AUTO_CA_SCAN', false),
   enableImmediateGroupAlerts: booleanFromEnv('ENABLE_IMMEDIATE_GROUP_ALERTS', false),
   marketRefreshIntervalSeconds: numberFromEnv('MARKET_REFRESH_INTERVAL_SECONDS', 60),

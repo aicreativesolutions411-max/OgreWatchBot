@@ -67,8 +67,6 @@ services:
         value: 30
       - key: COMMAND_GATE_MESSAGES
         value: 10
-      - key: PANEL_REUSE_MINUTES
-        value: 60
       - key: ENABLE_AUTO_CA_SCAN
         value: false
       - key: ENABLE_IMMEDIATE_GROUP_ALERTS

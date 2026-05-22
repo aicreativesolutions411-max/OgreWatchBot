@@ -148,12 +148,11 @@ Group command/button spam is gated by message flow:
 
 ```text
 COMMAND_GATE_MESSAGES=10
-PANEL_REUSE_MINUTES=60
 ENABLE_AUTO_CA_SCAN=false
 ENABLE_IMMEDIATE_GROUP_ALERTS=false
 ```
 
-In groups and channels, repeating the same typed command will not post again until 10 new chat messages have appeared. Button clicks edit the same bot panel instead of posting new messages. When someone types a command, the bot reuses the last panel for 60 minutes when possible; after that it posts a fresh panel. DMs are not command-gated. The bot does not auto-scan posted contracts by default; users must click or send commands. The only proactive group post is the hourly digest.
+In groups and channels, repeating the same typed command will not post again until 10 new chat messages have appeared. A typed command creates a fresh clickable bot post, then button clicks edit that same post instead of adding more messages. DMs are not command-gated. The bot does not auto-scan posted contracts by default; users must click or send commands. The only proactive group post is the hourly digest, which is always sent as a fresh post.
 
 Commands must be typed in full. Partial commands such as `/w` are ignored silently and do not post the help menu. Plain words like `new`, `ping`, or `backup` do not trigger group/channel replies; users must send the exact slash command, for example `/new`, or click a button.
 

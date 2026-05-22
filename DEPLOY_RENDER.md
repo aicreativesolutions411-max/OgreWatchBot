@@ -78,12 +78,11 @@ Group anti-spam is included:
 
 ```text
 COMMAND_GATE_MESSAGES=10
-PANEL_REUSE_MINUTES=60
 ENABLE_AUTO_CA_SCAN=false
 ENABLE_IMMEDIATE_GROUP_ALERTS=false
 ```
 
-Repeated typed group commands are ignored until 10 new chat messages appear. Button clicks edit the same bot panel instead of posting a new message, and typed menu commands reuse the last panel for 60 minutes when possible. The only proactive group post is one clean hourly digest with trending coins, group tracked coins, watched wallets, new pairs, and quality-momentum tokens.
+Repeated typed group commands are ignored until 10 new chat messages appear. A typed command creates a fresh clickable bot post, then button clicks edit that same post instead of adding more messages. The only proactive group post is one clean hourly digest with trending coins, group tracked coins, watched wallets, new pairs, and quality-momentum tokens.
 
 Partial slash commands are ignored silently. `/w` will not trigger `/watchtoken` or the help menu. Plain words do not run commands in groups/channels; use exact slash commands or buttons.
 
