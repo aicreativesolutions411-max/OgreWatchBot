@@ -20,6 +20,7 @@ export class DexScreenerProvider {
     this.lastError = '';
     this.pairsByAddress = new Map();
     this.pairsByToken = new Map();
+    this.boostedTokens = new Set();
     this.riskProvider = new SolanaTrackerRiskProvider(config);
   }
 
@@ -78,10 +79,14 @@ export class DexScreenerProvider {
       this.#fetchSearchPairs()
     ]);
 
-    const tokenAddresses = unique([
-      ...solanaTokenAddresses(profiles),
+    const boostedTokenAddresses = unique([
       ...solanaTokenAddresses(latestBoosts),
       ...solanaTokenAddresses(topBoosts)
+    ]);
+
+    const tokenAddresses = unique([
+      ...boostedTokenAddresses,
+      ...solanaTokenAddresses(profiles)
     ]).slice(0, this.maxTokens);
 
     const tokenPairs = tokenAddresses.length ? await this.#fetchTokenPairs(tokenAddresses) : [];
@@ -95,6 +100,7 @@ export class DexScreenerProvider {
     }
 
     this.#replacePairs(allPairs);
+    this.boostedTokens = new Set(boostedTokenAddresses);
     this.lastRefreshAt = new Date();
     this.lastError = '';
     console.log(`[market-refresh] ${reason} ok: ${this.pairsByAddress.size} Solana pairs cached`);
@@ -243,6 +249,30 @@ export class DexScreenerProvider {
     }
 
     return this.fallbackProvider.getTrending(kind);
+  }
+
+  async getPaidBoosts() {
+    await this.ensureFreshForCommand();
+
+    const boostedPairs = [...this.pairsByAddress.values()]
+      .filter((pair) => this.boostedTokens.has(pair.baseTokenAddress) || this.boostedTokens.has(pair.quoteTokenAddress));
+    const scored = await this.#scorePairs(boostedPairs);
+    const boosts = this.#qualityFilter(scored)
+      .filter(({ pair }) => paidBoostHasSignal(pair))
+      .sort((a, b) => b.quality.score - a.quality.score || b.pair.liquidityUsd - a.pair.liquidityUsd)
+      .slice(0, 10)
+      .map(({ pair, quality }) => withQuality({
+        ca: pair.baseTokenAddress || pair.pairAddress,
+        symbol: pair.symbol,
+        marketCapUsd: pair.marketCapUsd,
+        liquidityUsd: pair.liquidityUsd,
+        ageMinutes: pair.ageMinutes,
+        movePercent: pair.priceChange1h || pair.priceChange5m || pair.priceChange24h,
+        reason: 'boosted and passed clean setup filter'
+      }, quality));
+
+    if (boosts.length || this.pairsByAddress.size > 0) return boosts;
+    return this.fallbackProvider.getPaidBoosts?.() ?? [];
   }
 
   async getPortfolio(wallet) {
@@ -401,6 +431,15 @@ function isFreshPotentialPair(pair) {
   return (buyPressure5m || buyPressure1h) && marketCapMove && activeVolume && saneLiquidity;
 }
 
+function paidBoostHasSignal(pair) {
+  const hasLiquidity = pair.liquidityUsd >= 5_000 || (pair.ageMinutes != null && pair.ageMinutes <= 60 && pair.liquidityUsd >= 2_500);
+  const saneMarketCap = pair.marketCapUsd >= 10_000 && pair.marketCapUsd <= 1_500_000;
+  const tradeActivity = pair.buys5m + pair.sells5m >= 4 || pair.buys1h + pair.sells1h >= 12;
+  const buyPressure = tradeActivity && (pair.buys5m >= pair.sells5m || pair.buys1h >= pair.sells1h * 1.05);
+  const notAlreadyVertical = pair.priceChange5m < 180 && pair.priceChange1h < 420;
+  return hasLiquidity && saneMarketCap && buyPressure && notAlreadyVertical;
+}
+
 function pairIsFreshOrSpiking(pair, kind) {
   const ageMinutes = Number(pair.ageMinutes);
   if (!Number.isFinite(ageMinutes) || ageMinutes <= 1440) return true;
@@ -413,6 +452,7 @@ function pairIsFreshOrSpiking(pair, kind) {
   const mcSpike24h = pair.priceChange24h >= 45;
 
   if (kind === '24h') return buySpike24h && mcSpike24h && pair.volume24hUsd >= pair.liquidityUsd * 1.5;
+  if (kind === 'volume') return (buySpike1h || buySpike24h) && (mcSpike1h || mcSpike24h) && pair.volume1hUsd >= pair.liquidityUsd * 0.4;
   if (kind === '1h' || kind === 'watched') return buySpike1h && mcSpike1h;
   if (kind === 'bought') return (buySpike5m || buySpike1h) && (mcSpike5m || mcSpike1h);
   if (kind === 'lowcaps') return pair.marketCapUsd <= 500_000 && (buySpike1h || buySpike5m) && (mcSpike1h || mcSpike5m);
@@ -423,6 +463,7 @@ function sortPairsForTrend(pairs, kind) {
   const list = pairs.filter((pair) => pair.liquidityUsd > 0);
   if (kind === '1h') return list.sort((a, b) => b.priceChange1h - a.priceChange1h);
   if (kind === '24h') return list.sort((a, b) => b.volume24hUsd - a.volume24hUsd);
+  if (kind === 'volume') return list.sort((a, b) => b.volume1hUsd - a.volume1hUsd);
   if (kind === 'lowcaps') return list.filter((pair) => pair.marketCapUsd > 0 && pair.marketCapUsd <= 500_000).sort((a, b) => b.volume1hUsd - a.volume1hUsd);
   if (kind === 'bought') return list.sort((a, b) => (b.buys5m - b.sells5m) - (a.buys5m - a.sells5m));
   if (kind === 'watched') return list.sort((a, b) => b.volume1hUsd - a.volume1hUsd);
@@ -441,12 +482,14 @@ function sortScoredPairsForTrend(scoredPairs, kind) {
 function trendPercent(pair, kind) {
   if (kind === '1h') return pair.priceChange1h;
   if (kind === '24h') return pair.priceChange24h;
+  if (kind === 'volume') return pair.priceChange1h || pair.priceChange5m;
   if (kind === 'bought') return pair.buys5m - pair.sells5m;
   return pair.priceChange5m || pair.priceChange1h || pair.priceChange24h;
 }
 
 function trendReason(pair, kind) {
   if (kind === '24h') return 'MC and liquidity momentum';
+  if (kind === 'volume') return 'active volume with clean setup';
   if (kind === 'bought') return `${pair.buys5m} buys / ${pair.sells5m} sells in 5m`;
   if (kind === 'lowcaps') return `$${Math.round(pair.marketCapUsd).toLocaleString('en-US')} market cap`;
   if (kind === '1h') return '1h MC momentum';
@@ -456,6 +499,7 @@ function trendReason(pair, kind) {
 function trendRank(pair, kind) {
   if (kind === '24h') return pair.volume24hUsd;
   if (kind === '1h') return pair.priceChange1h;
+  if (kind === 'volume') return pair.volume1hUsd;
   if (kind === 'bought') return pair.buys5m - pair.sells5m;
   if (kind === 'lowcaps') return pair.volume1hUsd;
   if (kind === 'watched') return pair.volume1hUsd;
@@ -467,6 +511,7 @@ function trendLabel(kind) {
     '5m': '5m Movers',
     '1h': '1h Movers',
     '24h': '24h Momentum',
+    volume: 'High Volume Setups',
     lowcaps: 'New Low Caps',
     bought: 'Most Bought',
     watched: 'Watched by Users'

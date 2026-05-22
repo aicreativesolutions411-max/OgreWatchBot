@@ -85,3 +85,10 @@ export const NEW_PAIR_DEFAULT_FILTERS = {
   mintDisabled: true,
   freezeDisabled: true
 };
+
+export const TOP_CALL_WINDOWS = [
+  { key: '1d', label: '1D', title: '1 Day', days: 1 },
+  { key: '1w', label: '1W', title: '1 Week', days: 7 },
+  { key: '2w', label: '2W', title: '2 Weeks', days: 14 },
+  { key: '1m', label: '1M', title: '1 Month', days: 30 }
+];

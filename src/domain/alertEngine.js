@@ -174,6 +174,8 @@ export class AlertEngine {
       if (now - lastSent < intervalMs) continue;
 
       const update = await this.buildHourlyGroupUpdate(group);
+      this.store.recordTokenCalls(update.topPicks, 'Hourly pick');
+      this.store.recordTokenCalls(update.newPairs, 'Hourly fresh pair');
       await this.telegram.sendMessage(
         group.id,
         hourlyGroupUpdateMessage(update, this.config, this.provider.marketStatus?.()),

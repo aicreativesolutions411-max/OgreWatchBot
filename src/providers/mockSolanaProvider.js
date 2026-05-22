@@ -55,6 +55,7 @@ export class MockSolanaProvider {
       '5m': '5m Movers',
       '1h': '1h Movers',
       '24h': '24h Momentum',
+      volume: 'High Volume Setups',
       lowcaps: 'New Low Caps',
       bought: 'Most Bought',
       watched: 'Watched by Users'
@@ -71,6 +72,18 @@ export class MockSolanaProvider {
         reason: reasonsFor(kind, index)
       }, ca)).sort((a, b) => b.movePercent - a.movePercent)
     };
+  }
+
+  async getPaidBoosts() {
+    return SAMPLE_CONTRACTS.map((ca, index) => withMockQuality({
+      ca,
+      symbol: tokenSymbolFromAddress(`${ca}:boost:${index}`),
+      marketCapUsd: seededNumber(`${ca}:boost:mc`, 24_000, 520_000),
+      liquidityUsd: seededNumber(`${ca}:boost:liq`, 5_000, 120_000),
+      ageMinutes: seededNumber(`${ca}:boost:age`, 12, 240),
+      movePercent: seededNumber(`${ca}:boost:move`, 6, 64),
+      reason: 'boosted and passed mock setup filter'
+    }, `${ca}:boost`)).sort((a, b) => b.qualityScore - a.qualityScore);
   }
 
   async getPortfolio(wallet) {
@@ -159,6 +172,7 @@ function reasonsFor(kind, index) {
     '5m': ['MC momentum', 'whale buys', 'liquidity added', 'holder jump'],
     '1h': ['market cap breakout', 'repeated buys', 'trend acceleration', 'new holders'],
     '24h': ['MC and liquidity momentum', 'steady accumulation', 'strong liquidity', 'watchlist demand'],
+    volume: ['high volume with clean setup', 'active trading', 'volume expansion', 'liquidity-backed volume'],
     lowcaps: ['low cap with liquidity', 'fresh pair traction', 'early holder growth', 'clean safety flags'],
     bought: ['most bought by tracked wallets', 'clustered buys', 'smart money entry', 'buy pressure'],
     watched: ['watched by users', 'group watchlist activity', 'DM watchlist growth', 'repeat scans']

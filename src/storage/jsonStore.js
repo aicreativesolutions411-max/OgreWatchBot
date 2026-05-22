@@ -15,6 +15,7 @@ const EMPTY_DATA = {
   },
   users: {},
   groups: {},
+  calls: {},
   cooldowns: {}
 };
 
@@ -375,6 +376,86 @@ export class JsonStore {
       wallets: [...new Set(Object.values(this.data.users).flatMap((user) => Object.keys(user.watchWallets)))]
     };
   }
+
+  recordTokenCalls(items = [], source = 'Alpha pick', options = {}) {
+    this.data.calls ??= {};
+    const now = nowIso();
+    const countCall = options.countCall !== false;
+    let changed = false;
+
+    for (const item of items) {
+      const ca = String(item?.ca ?? '').trim();
+      if (!ca) continue;
+
+      const existing = this.data.calls[ca] ?? {
+        ca,
+        symbol: item.symbol ?? '',
+        firstCalledAt: now,
+        firstMarketCapUsd: numberValue(item.marketCapUsd),
+        firstLiquidityUsd: numberValue(item.liquidityUsd),
+        bestMarketCapUsd: numberValue(item.marketCapUsd),
+        sources: [],
+        callCount: 0
+      };
+
+      const marketCapUsd = numberValue(item.marketCapUsd);
+      const liquidityUsd = numberValue(item.liquidityUsd);
+
+      existing.symbol = item.symbol ?? existing.symbol ?? '';
+      existing.latestMarketCapUsd = marketCapUsd || existing.latestMarketCapUsd || existing.firstMarketCapUsd || 0;
+      existing.latestLiquidityUsd = liquidityUsd || existing.latestLiquidityUsd || existing.firstLiquidityUsd || 0;
+      existing.bestMarketCapUsd = Math.max(numberValue(existing.bestMarketCapUsd), marketCapUsd, numberValue(existing.latestMarketCapUsd));
+      existing.qualityScore = numberValue(item.qualityScore) || existing.qualityScore || null;
+      existing.qualityTier = item.qualityTier ?? existing.qualityTier ?? '';
+      existing.qualityRiskLevel = item.qualityRiskLevel ?? existing.qualityRiskLevel ?? '';
+      existing.lastSeenAt = now;
+
+      if (countCall) {
+        existing.lastCalledAt = now;
+        existing.lastSource = source;
+        existing.callCount = numberValue(existing.callCount) + 1;
+        existing.sources = unique([...(existing.sources ?? []), source]).slice(0, 8);
+      }
+
+      this.data.calls[ca] = existing;
+      changed = true;
+    }
+
+    if (changed) {
+      this.pruneTokenCalls();
+      this.save();
+    }
+  }
+
+  getTokenCallsSince(sinceMs, limit = 50) {
+    this.data.calls ??= {};
+    return Object.values(this.data.calls)
+      .filter((call) => Date.parse(call.firstCalledAt) >= sinceMs)
+      .sort((a, b) => Date.parse(b.lastCalledAt ?? b.firstCalledAt) - Date.parse(a.lastCalledAt ?? a.firstCalledAt))
+      .slice(0, limit);
+  }
+
+  getTopTokenCallsSince(sinceMs, limit = 10) {
+    return this.getTokenCallsSince(sinceMs, 500)
+      .map(enrichCallPerformance)
+      .sort((a, b) => b.movePercent - a.movePercent || b.bestMovePercent - a.bestMovePercent || b.callCount - a.callCount)
+      .slice(0, limit);
+  }
+
+  pruneTokenCalls(maxCalls = 500) {
+    this.data.calls ??= {};
+    const calls = Object.values(this.data.calls);
+    if (calls.length <= maxCalls) return;
+
+    const keep = new Set(calls
+      .sort((a, b) => Date.parse(b.lastCalledAt ?? b.firstCalledAt) - Date.parse(a.lastCalledAt ?? a.firstCalledAt))
+      .slice(0, maxCalls)
+      .map((call) => call.ca));
+
+    for (const ca of Object.keys(this.data.calls)) {
+      if (!keep.has(ca)) delete this.data.calls[ca];
+    }
+  }
 }
 
 function isRecoverableFileError(error) {
@@ -401,4 +482,24 @@ function normalizeStoreData(value) {
       ...(data.meta ?? {})
     }
   };
+}
+
+function enrichCallPerformance(call) {
+  const firstMarketCapUsd = numberValue(call.firstMarketCapUsd);
+  const latestMarketCapUsd = numberValue(call.latestMarketCapUsd);
+  const bestMarketCapUsd = numberValue(call.bestMarketCapUsd);
+  return {
+    ...call,
+    movePercent: firstMarketCapUsd > 0 ? ((latestMarketCapUsd - firstMarketCapUsd) / firstMarketCapUsd) * 100 : 0,
+    bestMovePercent: firstMarketCapUsd > 0 ? ((bestMarketCapUsd - firstMarketCapUsd) / firstMarketCapUsd) * 100 : 0
+  };
+}
+
+function numberValue(value) {
+  const number = Number(value);
+  return Number.isFinite(number) ? number : 0;
+}
+
+function unique(values) {
+  return [...new Set(values.filter(Boolean))];
 }

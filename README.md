@@ -5,7 +5,8 @@ A clean Telegram bot scaffold for the Radar/Watchtower idea:
 - DMs get detailed, user-controlled alerts.
 - Groups get only filtered highlights and scheduled digests.
 - Watches can be silent, instant, important-only, hourly, or daily.
-- Buttons route users to scan, buy, chart, watch, or mute without cluttering chat.
+- Buttons route users through Find Alpha, Token Deep Dive, Wallet Intel, Safety Check, alerts, scan, buy, chart, watch, or mute without cluttering chat.
+- Alpha views include Top Calls, filtered new pairs, trending, most-bought pressure, high-volume setups, low-cap gems, and clean paid boosts.
 
 The project has no npm dependencies. It uses Telegram's Bot API and DEX Screener's public API through Node's built-in `fetch`, then stores state in a local JSON file.
 
@@ -159,8 +160,12 @@ Commands must be typed in full. Partial commands such as `/w` are ignored silent
 - `/start` - Open the main menu
 - `/watchtoken CA` - Watch a token
 - `/watchwallet walletaddress` - Watch a wallet
+- `/topcalls` - Show the best bot-surfaced calls for 1D, 1W, 2W, or 1M
+- `/scan CA` - Token deep dive with MC, liquidity, setup, warnings, and quick buttons
+- `/safety CA` - Red-flag first token check
 - `/new` - View filtered new pairs
 - `/newpairs` - View filtered new pairs
+- `/boosts` - View paid-boosted tokens that still pass the quality filter
 - `/untrack CA_OR_TICKER_OR_WALLET` - Remove a personal watch, and remove the group watch when used by a group admin
 - `/untrackcoin CA_OR_TICKER` - Remove a watched coin/token by ticker or contract address
 - `/untracktoken CA_OR_TICKER` - Same as `/untrackcoin`
@@ -262,6 +267,7 @@ The rest of the bot is already shaped around provider methods:
 - `scanToken(ca)`
 - `getNewPairs(filters)`
 - `getTrending(kind)`
+- `getPaidBoosts()`
 - `getPortfolio(wallet)`
 - `getMarketReport()`
 - `pollWatchedEvents(context)`

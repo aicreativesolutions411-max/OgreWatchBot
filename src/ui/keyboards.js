@@ -1,16 +1,63 @@
-import { ALERT_MODES, NEW_PAIR_AGE_OPTIONS } from '../domain/defaults.js';
+import { ALERT_MODES, NEW_PAIR_AGE_OPTIONS, TOP_CALL_WINDOWS } from '../domain/defaults.js';
 import { linkFromTemplate } from '../utils/format.js';
 
 export function mainMenuKeyboard(options = {}) {
   const rows = [
-    [callbackButton('Watch Token', 'menu:watchtoken'), callbackButton('Watch Wallet', 'menu:watchwallet')],
-    [callbackButton('New Pairs', 'menu:new'), callbackButton('Trending', 'menu:trending')],
-    [callbackButton('My Alerts', 'menu:alerts'), callbackButton('My Watchlist', 'menu:watchlist')],
+    [callbackButton('Find Alpha', 'menu:alpha'), callbackButton('Token Deep Dive', 'menu:deepdive')],
+    [callbackButton('Wallet Intel', 'menu:walletintel'), callbackButton('Safety Check', 'menu:safety')],
+    [callbackButton('Smart Alerts', 'menu:alerts'), callbackButton('My Watchlist', 'menu:watchlist')],
     options.showAdmin
       ? [callbackButton('Group Settings', 'menu:groupsettings'), callbackButton('Daily Report', 'menu:report')]
-      : [callbackButton('Daily Report', 'menu:report')]
+      : [callbackButton('Daily Report', 'menu:report'), callbackButton('Help', 'menu:help')]
   ];
   return inlineKeyboard(rows);
+}
+
+export function findAlphaKeyboard() {
+  return inlineKeyboard([
+    [callbackButton('Top Calls', 'topcalls:1d'), callbackButton('New Pairs', 'menu:new')],
+    [callbackButton('Trending', 'menu:trending'), callbackButton('Whale Buys', 'trending:bought')],
+    [callbackButton('Low Cap Gems', 'trending:lowcaps'), callbackButton('Volume Spikes', 'trending:volume')],
+    [callbackButton('Paid Boosts', 'alpha:boosts'), callbackButton('Smart Filters', 'alpha:filters')],
+    [callbackButton('Back', 'menu:start')]
+  ]);
+}
+
+export function topCallsKeyboard(activeWindow = '1d') {
+  const windowButtons = TOP_CALL_WINDOWS.map((window) => {
+    const marker = window.key === activeWindow ? '* ' : '';
+    return callbackButton(`${marker}${window.label}`, `topcalls:${window.key}`);
+  });
+
+  return inlineKeyboard([
+    windowButtons,
+    [callbackButton('Find Alpha', 'menu:alpha'), callbackButton('Fresh Pairs', 'new:refresh')],
+    [callbackButton('Back', 'menu:start')]
+  ]);
+}
+
+export function tokenDeepDiveKeyboard() {
+  return inlineKeyboard([
+    [callbackButton('Scan Token', 'deepdive:scan'), callbackButton('Safety Check', 'deepdive:safety')],
+    [callbackButton('Watch Token', 'menu:watchtoken'), callbackButton('Find Alpha', 'menu:alpha')],
+    [callbackButton('Back', 'menu:start')]
+  ]);
+}
+
+export function walletIntelKeyboard() {
+  return inlineKeyboard([
+    [callbackButton('Watch Wallet', 'menu:watchwallet'), callbackButton('Wallet Summary', 'walletintel:portfolio')],
+    [callbackButton('Most Bought', 'trending:bought'), callbackButton('My Watchlist', 'menu:watchlist')],
+    [callbackButton('Back', 'menu:start')]
+  ]);
+}
+
+export function safetyKeyboard() {
+  return inlineKeyboard([
+    [callbackButton('Safety Scan', 'deepdive:safety'), callbackButton('Clean New Pairs', 'menu:new')],
+    [callbackButton('Smart Filters', 'alpha:filters'), callbackButton('Paid Boosts', 'alpha:boosts')],
+    [callbackButton('Back', 'menu:start')]
+  ]);
 }
 
 export function alertPrefsKeyboard(activeMode) {
@@ -74,7 +121,8 @@ export function trendingKeyboard() {
   return inlineKeyboard([
     [callbackButton('5m Movers', 'trending:5m'), callbackButton('1h Movers', 'trending:1h')],
     [callbackButton('24h Momentum', 'trending:24h'), callbackButton('New Low Caps', 'trending:lowcaps')],
-    [callbackButton('Most Bought', 'trending:bought'), callbackButton('Watched by Users', 'trending:watched')]
+    [callbackButton('Most Bought', 'trending:bought'), callbackButton('Volume Spikes', 'trending:volume')],
+    [callbackButton('Watched by Users', 'trending:watched'), callbackButton('Back', 'menu:alpha')]
   ]);
 }
 
@@ -93,7 +141,8 @@ export function groupSettingsKeyboard(group) {
 
 export function reportKeyboard() {
   return inlineKeyboard([
-    [callbackButton('5m Movers', 'trending:5m'), callbackButton('Fresh Pairs', 'new:refresh')],
+    [callbackButton('Find Alpha', 'menu:alpha'), callbackButton('Top Calls', 'topcalls:1d')],
+    [callbackButton('Fresh Pairs', 'new:refresh'), callbackButton('Safety Check', 'menu:safety')],
     [callbackButton('Watchlist', 'menu:watchlist')]
   ]);
 }

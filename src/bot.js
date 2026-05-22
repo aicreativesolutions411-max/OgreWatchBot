@@ -1,29 +1,40 @@
-import { NEW_PAIR_AGE_OPTIONS, NEW_PAIR_DEFAULT_FILTERS } from './domain/defaults.js';
+import { NEW_PAIR_AGE_OPTIONS, NEW_PAIR_DEFAULT_FILTERS, TOP_CALL_WINDOWS } from './domain/defaults.js';
 import { AntiSpam } from './domain/antiSpam.js';
 import {
   actionButtons,
   alertPrefsKeyboard,
+  findAlphaKeyboard,
   groupSettingsKeyboard,
   mainMenuKeyboard,
   newPairsKeyboard,
   reportKeyboard,
+  safetyKeyboard,
+  tokenDeepDiveKeyboard,
   tokenOptionsKeyboard,
+  topCallsKeyboard,
   trendingKeyboard,
+  walletIntelKeyboard,
   walletOptionsKeyboard
 } from './ui/keyboards.js';
 import {
   alertPrefsMessage,
   askTokenOptionsMessage,
   askWalletOptionsMessage,
+  findAlphaMessage,
   groupSettingsMessage,
   helpMessage,
   mainMenuMessage,
   marketReportMessage,
   newPairFiltersMessage,
   newPairsMessage,
+  paidBoostsMessage,
   portfolioMessage,
+  safetyMenuMessage,
+  safetyMessage,
   scanMessage,
+  tokenDeepDiveMenuMessage,
   tokenWatchedMessage,
+  topCallsMessage,
   trendingMessage,
   untrackAdminRequiredMessage,
   untrackNotFoundMessage,
@@ -31,6 +42,7 @@ import {
   untrackWalletMessage,
   usageMessage,
   walletWatchedMessage,
+  walletIntelMessage,
   watchlistMessage
 } from './ui/messages.js';
 import { findSolanaAddresses, looksLikeSolanaAddress } from './utils/solana.js';
@@ -39,8 +51,12 @@ const PUBLIC_COMMANDS = [
   { command: 'start', description: 'Open main menu' },
   { command: 'watchtoken', description: 'Watch a token' },
   { command: 'watchwallet', description: 'Watch a wallet' },
+  { command: 'topcalls', description: 'Best bot calls' },
+  { command: 'scan', description: 'Token deep dive' },
+  { command: 'safety', description: 'Check token red flags' },
   { command: 'new', description: 'View new pairs' },
   { command: 'newpairs', description: 'View new pairs' },
+  { command: 'boosts', description: 'Clean paid boosts' },
   { command: 'untrack', description: 'Untrack token or wallet' },
   { command: 'untrackcoin', description: 'Untrack a coin' },
   { command: 'untracktoken', description: 'Untrack a token' },
@@ -249,9 +265,21 @@ export class RadarBot {
       case '/watchwallet':
         await this.commandWatchWallet(message, args);
         break;
+      case '/topcalls':
+        await this.commandTopCalls(message.chat.id, args);
+        break;
+      case '/scan':
+        await this.commandScan(message.chat.id, args);
+        break;
+      case '/safety':
+        await this.commandSafety(message.chat.id, args);
+        break;
       case '/new':
       case '/newpairs':
         await this.commandNewPairs(message.chat.id);
+        break;
+      case '/boosts':
+        await this.commandPaidBoosts(message.chat.id);
         break;
       case '/untrack':
         await this.commandUntrack(message, args, 'any');
@@ -331,14 +359,25 @@ export class RadarBot {
         from: callback.from
       }));
     }
+    if (data === 'menu:alpha') return this.telegram.sendMessage(chatId, findAlphaMessage(this.config), findAlphaKeyboard());
+    if (data === 'menu:deepdive') return this.telegram.sendMessage(chatId, tokenDeepDiveMenuMessage(this.config), tokenDeepDiveKeyboard());
+    if (data === 'menu:walletintel') return this.telegram.sendMessage(chatId, walletIntelMessage(this.config), walletIntelKeyboard());
+    if (data === 'menu:safety') return this.telegram.sendMessage(chatId, safetyMenuMessage(this.config), safetyKeyboard());
+    if (data === 'menu:help') return this.telegram.sendMessage(chatId, helpMessage(this.config));
     if (data === 'menu:watchtoken') return this.telegram.sendMessage(chatId, usageMessage('/watchtoken CA', '/watchtoken So11111111111111111111111111111111111111112'));
-    if (data === 'menu:watchwallet') return this.telegram.sendMessage(chatId, usageMessage('/watchwallet walletaddress', '/watchwallet 7fL4...wallet'));
+    if (data === 'menu:watchwallet') return this.telegram.sendMessage(chatId, usageMessage('/watchwallet walletaddress', '/watchwallet So11111111111111111111111111111111111111112'));
     if (data === 'menu:new') return this.commandNewPairs(chatId);
     if (data === 'menu:trending') return this.commandTrending(chatId, '5m');
     if (data === 'menu:alerts') return this.commandMyAlerts({ chat: { id: chatId }, from: callback.from });
     if (data === 'menu:watchlist') return this.commandMyWatchlist({ chat: { id: chatId }, from: callback.from });
     if (data === 'menu:groupsettings') return this.commandGroupSettings({ chat: message.chat, from: callback.from });
     if (data === 'menu:report') return this.commandReport(chatId);
+    if (data === 'alpha:boosts') return this.commandPaidBoosts(chatId);
+    if (data === 'alpha:filters') return this.telegram.sendMessage(chatId, newPairFiltersMessage(), findAlphaKeyboard());
+    if (data.startsWith('topcalls:')) return this.commandTopCalls(chatId, [data.split(':')[1] ?? '1d']);
+    if (data === 'deepdive:scan') return this.telegram.sendMessage(chatId, usageMessage('/scan CA', '/scan So11111111111111111111111111111111111111112'));
+    if (data === 'deepdive:safety') return this.telegram.sendMessage(chatId, usageMessage('/safety CA', '/safety So11111111111111111111111111111111111111112'));
+    if (data === 'walletintel:portfolio') return this.telegram.sendMessage(chatId, usageMessage('/portfolio walletaddress', '/portfolio So11111111111111111111111111111111111111112'));
 
     if (data.startsWith('alertmode:')) return this.callbackAlertMode(chatId, message.message_id, userId, data);
     if (data.startsWith('wt:')) return this.callbackWatchToken(message.chat, userId, data);
@@ -571,6 +610,57 @@ export class RadarBot {
     }
   }
 
+  async commandScan(chatId, args) {
+    const ca = args[0];
+    if (!ca || !looksLikeSolanaAddress(ca)) {
+      await this.telegram.sendMessage(chatId, tokenDeepDiveMenuMessage(this.config), tokenDeepDiveKeyboard());
+      return;
+    }
+
+    const scan = await this.provider.scanToken(ca);
+    await this.telegram.sendMessage(chatId, scanMessage(scan, this.config), actionButtons(this.config, scan.ca ?? ca));
+  }
+
+  async commandSafety(chatId, args) {
+    const ca = args[0];
+    if (!ca || !looksLikeSolanaAddress(ca)) {
+      await this.telegram.sendMessage(chatId, safetyMenuMessage(this.config), safetyKeyboard());
+      return;
+    }
+
+    const scan = await this.provider.scanToken(ca);
+    await this.telegram.sendMessage(chatId, safetyMessage(scan, this.config), actionButtons(this.config, scan.ca ?? ca));
+  }
+
+  async commandPaidBoosts(chatId) {
+    const boosts = await (this.provider.getPaidBoosts?.() ?? Promise.resolve([]));
+    this.store.recordTokenCalls(boosts, 'Paid boosts');
+    await this.telegram.sendMessage(chatId, paidBoostsMessage(boosts, this.config, this.provider.marketStatus?.()), findAlphaKeyboard());
+  }
+
+  async commandTopCalls(chatId, args = []) {
+    const windowKey = normalizeTopCallWindow(args.join(' '));
+    const sinceMs = Date.now() - topCallWindowMs(windowKey);
+    const callsToRefresh = this.store.getTokenCallsSince(sinceMs, 30);
+    const refreshed = [];
+
+    for (const call of callsToRefresh) {
+      try {
+        const scan = await this.provider.scanToken(call.ca);
+        refreshed.push({ ...scan, ca: call.ca, symbol: scan.symbol || call.symbol });
+      } catch (error) {
+        console.warn(`[top-calls-refresh] ${call.ca} ${error.message}`);
+      }
+    }
+
+    if (refreshed.length) {
+      this.store.recordTokenCalls(refreshed, 'Latest scan', { countCall: false });
+    }
+
+    const calls = this.store.getTopTokenCallsSince(sinceMs, 10);
+    await this.telegram.sendMessage(chatId, topCallsMessage(calls, windowKey, this.config, this.provider.marketStatus?.()), topCallsKeyboard(windowKey));
+  }
+
   async commandNewPairs(chatId, options = {}) {
     const maxAgeMinutes = normalizeNewPairAge(options.maxAgeMinutes ?? this.config.newPairDefaultAgeMinutes ?? NEW_PAIR_DEFAULT_FILTERS.maxAgeMinutes);
     const filters = {
@@ -581,6 +671,7 @@ export class RadarBot {
       maxAgeMinutes
     };
     const pairs = await this.provider.getNewPairs(filters);
+    this.store.recordTokenCalls(pairs, 'New pairs');
     await this.telegram.sendMessage(
       chatId,
       newPairsMessage(pairs, this.config, this.provider.marketStatus?.(), filters),
@@ -590,6 +681,7 @@ export class RadarBot {
 
   async commandTrending(chatId, kind) {
     const trending = await this.provider.getTrending(kind);
+    this.store.recordTokenCalls(trending.tokens, trending.label);
     await this.telegram.sendMessage(chatId, trendingMessage(trending.tokens, trending.label, this.config, this.provider.marketStatus?.()), trendingKeyboard());
   }
 
@@ -639,6 +731,8 @@ export class RadarBot {
 
   async commandReport(chatId) {
     const report = await this.provider.getMarketReport();
+    this.store.recordTokenCalls(report.topTokens, 'Daily report');
+    this.store.recordTokenCalls(report.newPairs, 'Daily report fresh pairs');
     await this.telegram.sendMessage(chatId, marketReportMessage(report, this.config, this.provider.marketStatus?.()), reportKeyboard());
   }
 
@@ -995,7 +1089,7 @@ export class RadarBot {
 
         return {
           status: 'registered-channel',
-          message: 'Commands refreshed for this channel. If Telegram does not show a menu here, typed commands like /ping and ping still work.'
+          message: 'Commands refreshed for this channel. If Telegram does not show a menu here, exact typed slash commands like /ping still work.'
         };
       }
 
@@ -1125,10 +1219,15 @@ function isStrictCommand(text, expectedCommand) {
 function commandActionKey(command, args = []) {
   const firstArg = args[0] ?? '';
   const secondArg = args[1] ?? '';
+  const topCallWindowArg = args.join(' ');
   const keys = {
     '/start': 'menu:start',
+    '/topcalls': `topcalls:${normalizeTopCallWindow(topCallWindowArg)}`,
+    '/scan': `scan:${firstArg}`,
+    '/safety': `safety:${firstArg}`,
     '/new': 'market:new',
     '/newpairs': 'market:new',
+    '/boosts': 'market:boosts',
     '/trending': 'market:trending:5m',
     '/report': 'market:report',
     '/myalerts': 'menu:alerts',
@@ -1151,6 +1250,16 @@ function commandActionKey(command, args = []) {
 
 function callbackActionKey(data = '') {
   if (data === 'menu:start') return 'menu:start';
+  if (data === 'menu:alpha') return 'menu:alpha';
+  if (data === 'menu:deepdive') return 'menu:deepdive';
+  if (data === 'menu:walletintel') return 'menu:walletintel';
+  if (data === 'menu:safety') return 'menu:safety';
+  if (data === 'menu:help') return 'help';
+  if (data === 'alpha:boosts') return 'market:boosts';
+  if (data === 'alpha:filters') return 'market:new:filters';
+  if (data.startsWith('topcalls:')) return `topcalls:${data.split(':')[1] ?? '1d'}`;
+  if (data.startsWith('deepdive:')) return data;
+  if (data.startsWith('walletintel:')) return data;
   if (data === 'menu:new') return 'market:new';
   if (data.startsWith('new:age:')) return `market:${data}`;
   if (data.startsWith('new:')) return data === 'new:filters' ? 'market:new:filters' : 'market:new';
@@ -1212,6 +1321,31 @@ function normalizeTicker(value) {
     .replace(/^\$/, '')
     .toUpperCase()
     .replace(/[^A-Z0-9]/g, '');
+}
+
+function normalizeTopCallWindow(value) {
+  const text = String(value ?? '').toLowerCase().trim();
+  const aliases = {
+    day: '1d',
+    '1day': '1d',
+    '1d': '1d',
+    week: '1w',
+    '1week': '1w',
+    '1w': '1w',
+    '2week': '2w',
+    '2weeks': '2w',
+    '2w': '2w',
+    month: '1m',
+    '1month': '1m',
+    '30d': '1m',
+    '1m': '1m'
+  };
+  return aliases[text.replace(/\s+/g, '')] ?? '1d';
+}
+
+function topCallWindowMs(windowKey) {
+  const window = TOP_CALL_WINDOWS.find((item) => item.key === windowKey) ?? TOP_CALL_WINDOWS[0];
+  return window.days * 24 * 60 * 60 * 1000;
 }
 
 function normalizeNewPairAge(value) {
