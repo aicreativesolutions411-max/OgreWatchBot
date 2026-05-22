@@ -59,7 +59,7 @@ MARKET_QUALITY_MIN_SCORE=62
 MARKET_QUALITY_FRESH_MIN_LIQUIDITY_USD=2500
 ```
 
-The bot refreshes market data silently once per minute. It does not post each refresh; commands such as `/new`, `/trending`, `/boosts`, `/topcalls`, `/scan`, `/safety`, and `/report` use the fresh cache and show the last update age. New pairs, trending lists, paid boosts, top calls, reports, and group digests are quality-filtered before posting. `/new` defaults to a 1-hour window and has buttons for 10m, 30m, 1h, 6h, 12h, and 1d. The hourly group digest only shows new pairs from the last hour. Posted token rows show market cap and liquidity; volume is kept as a hidden scoring signal.
+The bot refreshes market data silently once per minute. It does not post each refresh; commands such as `/new`, `/trending`, `/boosts`, `/topcalls`, `/scan`, and `/report` use the fresh cache and show the latest results. New pairs, trending lists, paid boosts, top calls, reports, and group digests are quality-filtered before posting. `/new` defaults to a 1-hour window and has buttons for 10m, 30m, 1h, 6h, 12h, and 1d. The hourly group digest only shows new pairs from the last hour. Posted token rows show market cap and liquidity; volume is kept as a hidden scoring signal.
 
 Hourly group updates are watcher picks: the bot combines fresh pairs, short-term momentum, and 24h setup data, removes duplicates, and posts the strongest setups first.
 
@@ -107,7 +107,6 @@ Public user commands are registered for everyone:
 /watchwallet
 /topcalls
 /scan
-/safety
 /new
 /newpairs
 /boosts

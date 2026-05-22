@@ -8,7 +8,6 @@ import {
   mainMenuKeyboard,
   newPairsKeyboard,
   reportKeyboard,
-  safetyKeyboard,
   tokenDeepDiveKeyboard,
   tokenOptionsKeyboard,
   topCallsKeyboard,
@@ -29,8 +28,6 @@ import {
   newPairsMessage,
   paidBoostsMessage,
   portfolioMessage,
-  safetyMenuMessage,
-  safetyMessage,
   scanMessage,
   tokenDeepDiveMenuMessage,
   tokenWatchedMessage,
@@ -53,7 +50,6 @@ const PUBLIC_COMMANDS = [
   { command: 'watchwallet', description: 'Watch a wallet' },
   { command: 'topcalls', description: 'Best bot calls' },
   { command: 'scan', description: 'Token deep dive' },
-  { command: 'safety', description: 'Check token red flags' },
   { command: 'new', description: 'View new pairs' },
   { command: 'newpairs', description: 'View new pairs' },
   { command: 'boosts', description: 'Clean paid boosts' },
@@ -271,9 +267,6 @@ export class RadarBot {
       case '/scan':
         await this.commandScan(message.chat.id, args);
         break;
-      case '/safety':
-        await this.commandSafety(message.chat.id, args);
-        break;
       case '/new':
       case '/newpairs':
         await this.commandNewPairs(message.chat.id);
@@ -359,34 +352,37 @@ export class RadarBot {
         from: callback.from
       }));
     }
-    if (data === 'menu:alpha') return this.telegram.sendMessage(chatId, findAlphaMessage(this.config), findAlphaKeyboard());
-    if (data === 'menu:deepdive') return this.telegram.sendMessage(chatId, tokenDeepDiveMenuMessage(this.config), tokenDeepDiveKeyboard());
-    if (data === 'menu:walletintel') return this.telegram.sendMessage(chatId, walletIntelMessage(this.config), walletIntelKeyboard());
-    if (data === 'menu:safety') return this.telegram.sendMessage(chatId, safetyMenuMessage(this.config), safetyKeyboard());
-    if (data === 'menu:help') return this.telegram.sendMessage(chatId, helpMessage(this.config));
-    if (data === 'menu:watchtoken') return this.telegram.sendMessage(chatId, usageMessage('/watchtoken CA', '/watchtoken So11111111111111111111111111111111111111112'));
-    if (data === 'menu:watchwallet') return this.telegram.sendMessage(chatId, usageMessage('/watchwallet walletaddress', '/watchwallet So11111111111111111111111111111111111111112'));
-    if (data === 'menu:new') return this.commandNewPairs(chatId);
-    if (data === 'menu:trending') return this.commandTrending(chatId, '5m');
-    if (data === 'menu:alerts') return this.commandMyAlerts({ chat: { id: chatId }, from: callback.from });
-    if (data === 'menu:watchlist') return this.commandMyWatchlist({ chat: { id: chatId }, from: callback.from });
-    if (data === 'menu:groupsettings') return this.commandGroupSettings({ chat: message.chat, from: callback.from });
-    if (data === 'menu:report') return this.commandReport(chatId);
-    if (data === 'alpha:boosts') return this.commandPaidBoosts(chatId);
-    if (data === 'alpha:filters') return this.telegram.sendMessage(chatId, newPairFiltersMessage(), findAlphaKeyboard());
-    if (data.startsWith('topcalls:')) return this.commandTopCalls(chatId, [data.split(':')[1] ?? '1d']);
-    if (data === 'deepdive:scan') return this.telegram.sendMessage(chatId, usageMessage('/scan CA', '/scan So11111111111111111111111111111111111111112'));
-    if (data === 'deepdive:safety') return this.telegram.sendMessage(chatId, usageMessage('/safety CA', '/safety So11111111111111111111111111111111111111112'));
-    if (data === 'walletintel:portfolio') return this.telegram.sendMessage(chatId, usageMessage('/portfolio walletaddress', '/portfolio So11111111111111111111111111111111111111112'));
+    if (data === 'menu:alpha') return this.sendOrEdit(chatId, message.message_id, findAlphaMessage(this.config), findAlphaKeyboard());
+    if (data === 'menu:deepdive') return this.sendOrEdit(chatId, message.message_id, tokenDeepDiveMenuMessage(this.config), tokenDeepDiveKeyboard());
+    if (data === 'menu:walletintel') return this.sendOrEdit(chatId, message.message_id, walletIntelMessage(this.config), walletIntelKeyboard());
+    if (data === 'menu:help') return this.sendOrEdit(chatId, message.message_id, helpMessage(this.config), mainMenuKeyboard({
+      showAdmin: await this.shouldShowAdminControls({
+        chat: message.chat,
+        from: callback.from
+      })
+    }));
+    if (data === 'menu:watchtoken') return this.sendOrEdit(chatId, message.message_id, usageMessage('/watchtoken CA', '/watchtoken So11111111111111111111111111111111111111112'), tokenDeepDiveKeyboard());
+    if (data === 'menu:watchwallet') return this.sendOrEdit(chatId, message.message_id, usageMessage('/watchwallet walletaddress', '/watchwallet So11111111111111111111111111111111111111112'), walletIntelKeyboard());
+    if (data === 'menu:new') return this.commandNewPairs(chatId, { messageId: message.message_id });
+    if (data === 'menu:trending') return this.commandTrending(chatId, '5m', { messageId: message.message_id });
+    if (data === 'menu:alerts') return this.commandMyAlerts({ chat: { id: chatId }, from: callback.from }, { messageId: message.message_id });
+    if (data === 'menu:watchlist') return this.commandMyWatchlist({ chat: { id: chatId }, from: callback.from }, { messageId: message.message_id });
+    if (data === 'menu:groupsettings') return this.commandGroupSettings({ chat: message.chat, from: callback.from }, { messageId: message.message_id });
+    if (data === 'menu:report') return this.commandReport(chatId, { messageId: message.message_id });
+    if (data === 'alpha:boosts') return this.commandPaidBoosts(chatId, { messageId: message.message_id });
+    if (data === 'alpha:filters') return this.sendOrEdit(chatId, message.message_id, newPairFiltersMessage(), findAlphaKeyboard());
+    if (data.startsWith('topcalls:')) return this.commandTopCalls(chatId, [data.split(':')[1] ?? '1d'], { messageId: message.message_id });
+    if (data === 'deepdive:scan') return this.sendOrEdit(chatId, message.message_id, usageMessage('/scan CA', '/scan So11111111111111111111111111111111111111112'), tokenDeepDiveKeyboard());
+    if (data === 'walletintel:portfolio') return this.sendOrEdit(chatId, message.message_id, usageMessage('/portfolio walletaddress', '/portfolio So11111111111111111111111111111111111111112'), walletIntelKeyboard());
 
     if (data.startsWith('alertmode:')) return this.callbackAlertMode(chatId, message.message_id, userId, data);
-    if (data.startsWith('wt:')) return this.callbackWatchToken(message.chat, userId, data);
-    if (data.startsWith('ww:')) return this.callbackWatchWallet(message.chat, userId, data);
-    if (data.startsWith('qw:')) return this.callbackQuickWatch(message.chat, userId, data);
-    if (data.startsWith('mt:')) return this.callbackMuteToken(chatId, userId, data);
-    if (data.startsWith('portfolio:')) return this.commandPortfolio(chatId, [data.split(':')[1]]);
-    if (data.startsWith('new:')) return this.callbackNewPairs(chatId, data);
-    if (data.startsWith('trending:')) return this.commandTrending(chatId, data.split(':')[1] ?? '5m');
+    if (data.startsWith('wt:')) return this.callbackWatchToken(message.chat, userId, data, message.message_id);
+    if (data.startsWith('ww:')) return this.callbackWatchWallet(message.chat, userId, data, message.message_id);
+    if (data.startsWith('qw:')) return this.callbackQuickWatch(message.chat, userId, data, message.message_id);
+    if (data.startsWith('mt:')) return this.callbackMuteToken(chatId, userId, data, message.message_id);
+    if (data.startsWith('portfolio:')) return this.commandPortfolio(chatId, [data.split(':')[1]], { messageId: message.message_id });
+    if (data.startsWith('new:')) return this.callbackNewPairs(chatId, data, message.message_id);
+    if (data.startsWith('trending:')) return this.commandTrending(chatId, data.split(':')[1] ?? '5m', { messageId: message.message_id });
     if (data.startsWith('group:')) return this.callbackGroupSetting(callback, data);
 
     return null;
@@ -398,6 +394,19 @@ export class RadarBot {
 
   async editMenu(chatId, messageId, showAdmin = false) {
     await this.telegram.editMessageText(chatId, messageId, mainMenuMessage(this.config), mainMenuKeyboard({ showAdmin }));
+  }
+
+  async sendOrEdit(chatId, messageId, text, options = {}) {
+    if (!messageId) {
+      return this.telegram.sendMessage(chatId, text, options);
+    }
+
+    try {
+      return await this.telegram.editMessageText(chatId, messageId, text, options);
+    } catch (error) {
+      console.warn(`[edit-message] ${chatId}:${messageId} ${error.message}`);
+      return null;
+    }
   }
 
   async commandWatchToken(message, args) {
@@ -621,24 +630,13 @@ export class RadarBot {
     await this.telegram.sendMessage(chatId, scanMessage(scan, this.config), actionButtons(this.config, scan.ca ?? ca));
   }
 
-  async commandSafety(chatId, args) {
-    const ca = args[0];
-    if (!ca || !looksLikeSolanaAddress(ca)) {
-      await this.telegram.sendMessage(chatId, safetyMenuMessage(this.config), safetyKeyboard());
-      return;
-    }
-
-    const scan = await this.provider.scanToken(ca);
-    await this.telegram.sendMessage(chatId, safetyMessage(scan, this.config), actionButtons(this.config, scan.ca ?? ca));
-  }
-
-  async commandPaidBoosts(chatId) {
+  async commandPaidBoosts(chatId, options = {}) {
     const boosts = await (this.provider.getPaidBoosts?.() ?? Promise.resolve([]));
     this.store.recordTokenCalls(boosts, 'Paid boosts');
-    await this.telegram.sendMessage(chatId, paidBoostsMessage(boosts, this.config, this.provider.marketStatus?.()), findAlphaKeyboard());
+    await this.sendOrEdit(chatId, options.messageId, paidBoostsMessage(boosts, this.config, this.provider.marketStatus?.()), findAlphaKeyboard());
   }
 
-  async commandTopCalls(chatId, args = []) {
+  async commandTopCalls(chatId, args = [], options = {}) {
     const windowKey = normalizeTopCallWindow(args.join(' '));
     const sinceMs = Date.now() - topCallWindowMs(windowKey);
     const callsToRefresh = this.store.getTokenCallsSince(sinceMs, 30);
@@ -658,7 +656,7 @@ export class RadarBot {
     }
 
     const calls = this.store.getTopTokenCallsSince(sinceMs, 10);
-    await this.telegram.sendMessage(chatId, topCallsMessage(calls, windowKey, this.config, this.provider.marketStatus?.()), topCallsKeyboard(windowKey));
+    await this.sendOrEdit(chatId, options.messageId, topCallsMessage(calls, windowKey, this.config, this.provider.marketStatus?.()), topCallsKeyboard(windowKey));
   }
 
   async commandNewPairs(chatId, options = {}) {
@@ -672,20 +670,21 @@ export class RadarBot {
     };
     const pairs = await this.provider.getNewPairs(filters);
     this.store.recordTokenCalls(pairs, 'New pairs');
-    await this.telegram.sendMessage(
+    await this.sendOrEdit(
       chatId,
+      options.messageId,
       newPairsMessage(pairs, this.config, this.provider.marketStatus?.(), filters),
       newPairsKeyboard(maxAgeMinutes)
     );
   }
 
-  async commandTrending(chatId, kind) {
+  async commandTrending(chatId, kind, options = {}) {
     const trending = await this.provider.getTrending(kind);
     this.store.recordTokenCalls(trending.tokens, trending.label);
-    await this.telegram.sendMessage(chatId, trendingMessage(trending.tokens, trending.label, this.config, this.provider.marketStatus?.()), trendingKeyboard());
+    await this.sendOrEdit(chatId, options.messageId, trendingMessage(trending.tokens, trending.label, this.config, this.provider.marketStatus?.()), trendingKeyboard());
   }
 
-  async commandPortfolio(chatId, args) {
+  async commandPortfolio(chatId, args, options = {}) {
     const wallet = args[0];
     if (!wallet || !looksLikeSolanaAddress(wallet)) {
       await this.telegram.sendMessage(chatId, usageMessage('/portfolio walletaddress', '/portfolio So11111111111111111111111111111111111111112'));
@@ -693,27 +692,28 @@ export class RadarBot {
     }
 
     const summary = await this.provider.getPortfolio(wallet);
-    await this.telegram.sendMessage(chatId, portfolioMessage(summary, this.config), {
+    await this.sendOrEdit(chatId, options.messageId, portfolioMessage(summary, this.config), {
       reply_markup: {
         inline_keyboard: [
           [{ text: 'Track Wallet', callback_data: `ww:${wallet}:important` }, { text: 'Set Alerts', callback_data: 'menu:alerts' }],
-          [{ text: 'Refresh', callback_data: `portfolio:${wallet}` }]
+          [{ text: 'Refresh', callback_data: `portfolio:${wallet}` }],
+          [{ text: 'Back', callback_data: 'menu:walletintel' }]
         ]
       }
     });
   }
 
-  async commandMyAlerts(message) {
+  async commandMyAlerts(message, options = {}) {
     const user = this.store.ensureUser(message.from, message.chat.id);
-    await this.telegram.sendMessage(message.chat.id, alertPrefsMessage(user), alertPrefsKeyboard(user.settings.alertMode));
+    await this.sendOrEdit(message.chat.id, options.messageId, alertPrefsMessage(user), alertPrefsKeyboard(user.settings.alertMode));
   }
 
-  async commandMyWatchlist(message) {
+  async commandMyWatchlist(message, options = {}) {
     const user = this.store.ensureUser(message.from, message.chat.id);
-    await this.telegram.sendMessage(message.chat.id, watchlistMessage(user, this.config));
+    await this.sendOrEdit(message.chat.id, options.messageId, watchlistMessage(user, this.config));
   }
 
-  async commandGroupSettings(message) {
+  async commandGroupSettings(message, options = {}) {
     if (message.chat.type === 'private') {
       await this.telegram.sendMessage(message.chat.id, 'Group settings are available inside a group where you are an admin.');
       return;
@@ -726,14 +726,14 @@ export class RadarBot {
     }
 
     const group = this.store.ensureGroup(message.chat);
-    await this.telegram.sendMessage(message.chat.id, groupSettingsMessage(group, this.config), groupSettingsKeyboard(group));
+    await this.sendOrEdit(message.chat.id, options.messageId, groupSettingsMessage(group, this.config), groupSettingsKeyboard(group));
   }
 
-  async commandReport(chatId) {
+  async commandReport(chatId, options = {}) {
     const report = await this.provider.getMarketReport();
     this.store.recordTokenCalls(report.topTokens, 'Daily report');
     this.store.recordTokenCalls(report.newPairs, 'Daily report fresh pairs');
-    await this.telegram.sendMessage(chatId, marketReportMessage(report, this.config, this.provider.marketStatus?.()), reportKeyboard());
+    await this.sendOrEdit(chatId, options.messageId, marketReportMessage(report, this.config, this.provider.marketStatus?.()), reportKeyboard());
   }
 
   async commandPing(message) {
@@ -851,7 +851,7 @@ export class RadarBot {
     await this.telegram.editMessageText(chatId, messageId, alertPrefsMessage(user), alertPrefsKeyboard(user.settings.alertMode));
   }
 
-  async callbackWatchToken(chat, userId, data) {
+  async callbackWatchToken(chat, userId, data, messageId = null) {
     const [, ca, mode] = data.split(':');
     this.store.addUserTokenWatch(userId, ca, {
       mode,
@@ -860,10 +860,10 @@ export class RadarBot {
     if (chat.type !== 'private') {
       this.store.addGroupTokenWatch(chat.id, ca, { mode });
     }
-    await this.telegram.sendMessage(chat.id, tokenWatchedMessage(ca, mode, this.config), actionButtons(this.config, ca, { watch: false }));
+    await this.sendOrEdit(chat.id, messageId, tokenWatchedMessage(ca, mode, this.config), actionButtons(this.config, ca, { watch: false }));
   }
 
-  async callbackWatchWallet(chat, userId, data) {
+  async callbackWatchWallet(chat, userId, data, messageId = null) {
     const [, wallet, mode] = data.split(':');
     this.store.addUserWalletWatch(userId, wallet, {
       mode,
@@ -872,40 +872,40 @@ export class RadarBot {
     if (chat.type !== 'private') {
       this.store.addGroupWalletWatch(chat.id, wallet, { mode, label: 'Watched Wallet' });
     }
-    await this.telegram.sendMessage(chat.id, walletWatchedMessage(wallet, mode, this.config));
+    await this.sendOrEdit(chat.id, messageId, walletWatchedMessage(wallet, mode, this.config), walletIntelKeyboard());
   }
 
-  async callbackQuickWatch(chat, userId, data) {
+  async callbackQuickWatch(chat, userId, data, messageId = null) {
     const ca = data.split(':')[1];
     this.store.addUserTokenWatch(userId, ca, { mode: 'important', types: ['important'] });
     if (chat.type !== 'private') {
       this.store.addGroupTokenWatch(chat.id, ca, { mode: 'important' });
     }
-    await this.telegram.sendMessage(chat.id, tokenWatchedMessage(ca, 'important', this.config), actionButtons(this.config, ca, { watch: false }));
+    await this.sendOrEdit(chat.id, messageId, tokenWatchedMessage(ca, 'important', this.config), actionButtons(this.config, ca, { watch: false }));
   }
 
-  async callbackMuteToken(chatId, userId, data) {
+  async callbackMuteToken(chatId, userId, data, messageId = null) {
     const ca = data.split(':')[1];
     this.store.muteUserToken(userId, ca);
-    await this.telegram.sendMessage(chatId, `Muted token <code>${ca}</code>.`);
+    await this.sendOrEdit(chatId, messageId, `Muted token <code>${ca}</code>.`);
   }
 
-  async callbackNewPairs(chatId, data) {
+  async callbackNewPairs(chatId, data, messageId = null) {
     const [, action, rawValue] = data.split(':');
     if (action === 'filters') {
       const maxAgeMinutes = normalizeNewPairAge(this.config.newPairDefaultAgeMinutes ?? NEW_PAIR_DEFAULT_FILTERS.maxAgeMinutes);
-      await this.telegram.sendMessage(chatId, newPairFiltersMessage(), newPairsKeyboard(maxAgeMinutes));
+      await this.sendOrEdit(chatId, messageId, newPairFiltersMessage(), newPairsKeyboard(maxAgeMinutes));
       return;
     }
     if (action === 'watch') {
-      await this.telegram.sendMessage(chatId, 'New-pair watch mode is ready. Group auto-posting still follows admin settings and cooldowns.');
+      await this.sendOrEdit(chatId, messageId, 'New-pair watch mode is ready. Group auto-posting still follows admin settings and cooldowns.', newPairsKeyboard());
       return;
     }
     if (action === 'age') {
-      await this.commandNewPairs(chatId, { maxAgeMinutes: rawValue });
+      await this.commandNewPairs(chatId, { maxAgeMinutes: rawValue, messageId });
       return;
     }
-    await this.commandNewPairs(chatId);
+    await this.commandNewPairs(chatId, { messageId });
   }
 
   async callbackGroupSetting(callback, data) {
@@ -1224,7 +1224,6 @@ function commandActionKey(command, args = []) {
     '/start': 'menu:start',
     '/topcalls': `topcalls:${normalizeTopCallWindow(topCallWindowArg)}`,
     '/scan': `scan:${firstArg}`,
-    '/safety': `safety:${firstArg}`,
     '/new': 'market:new',
     '/newpairs': 'market:new',
     '/boosts': 'market:boosts',
@@ -1253,7 +1252,6 @@ function callbackActionKey(data = '') {
   if (data === 'menu:alpha') return 'menu:alpha';
   if (data === 'menu:deepdive') return 'menu:deepdive';
   if (data === 'menu:walletintel') return 'menu:walletintel';
-  if (data === 'menu:safety') return 'menu:safety';
   if (data === 'menu:help') return 'help';
   if (data === 'alpha:boosts') return 'market:boosts';
   if (data === 'alpha:filters') return 'market:new:filters';

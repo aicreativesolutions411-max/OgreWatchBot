@@ -5,7 +5,7 @@ export function mainMenuMessage(config) {
   return [
     `🛰 <b>${escapeHtml(config.botName)}</b>`,
     '',
-    'A simple alpha dashboard for clean new pairs, trending setups, wallet intel, safety checks, and alerts without chat spam.'
+    'A simple alpha dashboard for clean new pairs, trending setups, wallet intel, top calls, and alerts without chat spam.'
   ].join('\n');
 }
 
@@ -15,7 +15,7 @@ export function findAlphaMessage(config) {
     '',
     'Pick a lane. The bot filters noisy pairs, thin liquidity, bundle-like bursts, and obvious high-risk setups before showing results.',
     '',
-    'Best daily flow: New Pairs for early finds, Trending for momentum, Most Bought for wallet pressure, and Paid Boosts only after the safety filter.'
+    'Best daily flow: New Pairs for early finds, Trending for momentum, Most Bought for wallet pressure, and Paid Boosts only after the quality filter.'
   ].join('\n');
 }
 
@@ -27,7 +27,7 @@ export function tokenDeepDiveMenuMessage(config) {
     '',
     '<code>/scan So11111111111111111111111111111111111111112</code>',
     '',
-    `Use /safety CA when you want the red flags first. ${escapeHtml(config.brand)} will still keep the group quiet unless someone asks.`
+    `${escapeHtml(config.brand)} will keep the group quiet unless someone asks.`
   ].join('\n');
 }
 
@@ -43,16 +43,6 @@ export function walletIntelMessage() {
   ].join('\n');
 }
 
-export function safetyMenuMessage() {
-  return [
-    '<b>Safety Check</b>',
-    '',
-    'Safety Check puts warnings first: thin liquidity, sell pressure, no-sell spikes, bundle-like bursts, noisy volume, and optional Solana Tracker risk data.',
-    '',
-    '<code>/safety So11111111111111111111111111111111111111112</code>'
-  ].join('\n');
-}
-
 export function helpMessage(config) {
   return [
     `🛰 <b>${escapeHtml(config.botName)}</b>`,
@@ -63,7 +53,6 @@ export function helpMessage(config) {
     '/watchwallet walletaddress - Watch a wallet',
     '/topcalls - Best calls the bot surfaced',
     '/scan CA - Token deep dive',
-    '/safety CA - Red-flag first token check',
     '/new - View new Solana pairs',
     '/newpairs - View new Solana pairs',
     '/boosts - Clean paid-boosted tokens',
@@ -227,33 +216,6 @@ export function scanMessage(scan, config) {
   ].join('\n');
 }
 
-export function safetyMessage(scan, config) {
-  const warnings = scan.qualityWarnings?.length
-    ? scan.qualityWarnings.slice(0, 4).join(', ')
-    : 'No major filter warnings found.';
-  const strengths = scan.qualityStrengths?.length
-    ? scan.qualityStrengths.slice(0, 4).join(', ')
-    : 'No standout strengths yet.';
-
-  return [
-    `<b>${tokenLink(scan.symbol, scan.ca, config)} Safety Check</b>`,
-    '',
-    `Verdict: <b>${escapeHtml(scan.qualityRiskLevel ?? scan.risk ?? 'Unknown')}</b>`,
-    `Conviction: <b>${convictionLabel(scan)}</b>`,
-    `Setup: <b>${setupLabel(scan)}</b>`,
-    marketStatsLabel(scan) || null,
-    scan.externalRiskScore != null ? `External risk score: <b>${escapeHtml(scan.externalRiskScore)}/10</b>` : 'External risk score: <b>Not connected</b>',
-    '',
-    `<b>Red flags</b>: ${escapeHtml(warnings)}`,
-    `<b>Good signs</b>: ${escapeHtml(strengths)}`,
-    '',
-    `Mint disabled: <b>${yesNoUnknown(scan.mintDisabled)}</b>`,
-    `Freeze disabled: <b>${yesNoUnknown(scan.freezeDisabled)}</b>`,
-    '',
-    'Use this as a filter, not a guarantee. Better to skip noisy setups than chase every candle.'
-  ].filter((line) => line != null).join('\n');
-}
-
 export function newPairsMessage(pairs, config = {}, status = null, filters = NEW_PAIR_DEFAULT_FILTERS) {
   const lines = [`🆕 <b>New Solana Pairs (${ageWindowLabel(filters.maxAgeMinutes)})</b>`, ''];
   lines.push(...marketStatusLines(status));
@@ -304,7 +266,7 @@ export function paidBoostsMessage(tokens, config = {}, status = null) {
   const lines = ['<b>Clean Paid Boosts</b>', ''];
   lines.push(...marketStatusLines(status));
   if (status) lines.push('');
-  lines.push('Boosted tokens are not automatically good. These only show when they also pass the setup and safety filters.');
+  lines.push('Boosted tokens are not automatically good. These only show when they also pass the setup and quality filters.');
   lines.push('');
   if (!tokens.length) {
     lines.push('No clean paid boosts passed right now.');
@@ -379,12 +341,7 @@ export function marketReportMessage(report, config, status = null) {
 
 export function hourlyGroupUpdateMessage(update, config, status = null) {
   const lines = [`<b>Hourly Alpha Picks by ${escapeHtml(config.brand)}</b>`, ''];
-  lines.push(...marketStatusLines(status, { compact: true }));
-  if (status) lines.push('');
-  lines.push('Best clean setups found this hour. Use the buttons when you want to dig deeper.');
-  lines.push('');
-
-  lines.push('<b>Best finds right now</b>');
+  void status;
   pushTopPickRows(lines, update.topPicks, config);
   if (update.newPairs?.length) {
     lines.push('');
@@ -534,15 +491,12 @@ function pushPairRows(lines, pairs = [], config = {}) {
 
 function marketStatusLines(status, options = {}) {
   if (!status) return [];
-  if (options.compact) {
-    const lines = [`Updated <b>${escapeHtml(ageLabel(status.refreshedAt))}</b>`];
-    if (status.error) lines.push('Data source had a recent refresh issue; showing last clean cache.');
-    return lines;
-  }
-
-  const lines = [`Data: <b>${escapeHtml(status.source ?? 'Market')}</b> - updated <b>${escapeHtml(ageLabel(status.refreshedAt))}</b>`];
-  if (status.error) lines.push(`Last refresh error: <code>${escapeHtml(status.error)}</code>`);
-  return lines;
+  void options;
+  if (!status.error) return [];
+  return [
+    'Data source had a recent refresh issue; showing last clean cache.',
+    `Last refresh error: <code>${escapeHtml(status.error)}</code>`
+  ];
 }
 
 function tradeText(text, symbol, ca, config = {}) {

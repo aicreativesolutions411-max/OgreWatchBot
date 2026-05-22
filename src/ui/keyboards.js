@@ -4,7 +4,7 @@ import { linkFromTemplate } from '../utils/format.js';
 export function mainMenuKeyboard(options = {}) {
   const rows = [
     [callbackButton('Find Alpha', 'menu:alpha'), callbackButton('Token Deep Dive', 'menu:deepdive')],
-    [callbackButton('Wallet Intel', 'menu:walletintel'), callbackButton('Safety Check', 'menu:safety')],
+    [callbackButton('Wallet Intel', 'menu:walletintel'), callbackButton('Top Calls', 'topcalls:1d')],
     [callbackButton('Smart Alerts', 'menu:alerts'), callbackButton('My Watchlist', 'menu:watchlist')],
     options.showAdmin
       ? [callbackButton('Group Settings', 'menu:groupsettings'), callbackButton('Daily Report', 'menu:report')]
@@ -38,8 +38,8 @@ export function topCallsKeyboard(activeWindow = '1d') {
 
 export function tokenDeepDiveKeyboard() {
   return inlineKeyboard([
-    [callbackButton('Scan Token', 'deepdive:scan'), callbackButton('Safety Check', 'deepdive:safety')],
-    [callbackButton('Watch Token', 'menu:watchtoken'), callbackButton('Find Alpha', 'menu:alpha')],
+    [callbackButton('Scan Token', 'deepdive:scan'), callbackButton('Watch Token', 'menu:watchtoken')],
+    [callbackButton('Find Alpha', 'menu:alpha'), callbackButton('Top Calls', 'topcalls:1d')],
     [callbackButton('Back', 'menu:start')]
   ]);
 }
@@ -48,14 +48,6 @@ export function walletIntelKeyboard() {
   return inlineKeyboard([
     [callbackButton('Watch Wallet', 'menu:watchwallet'), callbackButton('Wallet Summary', 'walletintel:portfolio')],
     [callbackButton('Most Bought', 'trending:bought'), callbackButton('My Watchlist', 'menu:watchlist')],
-    [callbackButton('Back', 'menu:start')]
-  ]);
-}
-
-export function safetyKeyboard() {
-  return inlineKeyboard([
-    [callbackButton('Safety Scan', 'deepdive:safety'), callbackButton('Clean New Pairs', 'menu:new')],
-    [callbackButton('Smart Filters', 'alpha:filters'), callbackButton('Paid Boosts', 'alpha:boosts')],
     [callbackButton('Back', 'menu:start')]
   ]);
 }
@@ -74,7 +66,8 @@ export function tokenOptionsKeyboard(ca) {
     [callbackButton('Important Alerts', `wt:${ca}:important`)],
     [callbackButton('Price / MC Moves', `wt:${ca}:price`), callbackButton('Volume Spikes', `wt:${ca}:volume`)],
     [callbackButton('Whale Trades', `wt:${ca}:whales`), callbackButton('Liquidity Changes', `wt:${ca}:liquidity`)],
-    [callbackButton('Holder Growth', `wt:${ca}:holders`), callbackButton('Silent Tracking', `wt:${ca}:silent`)]
+    [callbackButton('Holder Growth', `wt:${ca}:holders`), callbackButton('Silent Tracking', `wt:${ca}:silent`)],
+    [callbackButton('Back', 'menu:deepdive')]
   ]);
 }
 
@@ -82,7 +75,8 @@ export function walletOptionsKeyboard(wallet) {
   return inlineKeyboard([
     [callbackButton('Important Trades Only', `ww:${wallet}:important`)],
     [callbackButton('Buys Only', `ww:${wallet}:buys`), callbackButton('Sells Only', `ww:${wallet}:sells`)],
-    [callbackButton('All Trades', `ww:${wallet}:all`), callbackButton('Silent Tracking', `ww:${wallet}:silent`)]
+    [callbackButton('All Trades', `ww:${wallet}:all`), callbackButton('Silent Tracking', `ww:${wallet}:silent`)],
+    [callbackButton('Back', 'menu:walletintel')]
   ]);
 }
 
@@ -135,15 +129,16 @@ export function groupSettingsKeyboard(group) {
     [callbackButton(`Trending Digest: ${onOff(s.trendingDigest)}`, 'group:toggle:trendingDigest')],
     [callbackButton(`Daily Report: ${onOff(s.dailyReport)}`, 'group:toggle:dailyReport')],
     [callbackButton(`Quiet Hours: ${onOff(s.quietHours.enabled)}`, 'group:toggleQuiet')],
-    [callbackButton('Cooldown', 'group:cooldown'), callbackButton('Save', 'group:save')]
+    [callbackButton('Cooldown', 'group:cooldown'), callbackButton('Save', 'group:save')],
+    [callbackButton('Back', 'menu:start')]
   ]);
 }
 
 export function reportKeyboard() {
   return inlineKeyboard([
     [callbackButton('Find Alpha', 'menu:alpha'), callbackButton('Top Calls', 'topcalls:1d')],
-    [callbackButton('Fresh Pairs', 'new:refresh'), callbackButton('Safety Check', 'menu:safety')],
-    [callbackButton('Watchlist', 'menu:watchlist')]
+    [callbackButton('Fresh Pairs', 'new:refresh'), callbackButton('Watchlist', 'menu:watchlist')],
+    [callbackButton('Back', 'menu:start')]
   ]);
 }
 

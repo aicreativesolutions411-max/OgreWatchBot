@@ -173,7 +173,7 @@ function reasonsFor(kind, index) {
     '1h': ['market cap breakout', 'repeated buys', 'trend acceleration', 'new holders'],
     '24h': ['MC and liquidity momentum', 'steady accumulation', 'strong liquidity', 'watchlist demand'],
     volume: ['high volume with clean setup', 'active trading', 'volume expansion', 'liquidity-backed volume'],
-    lowcaps: ['low cap with liquidity', 'fresh pair traction', 'early holder growth', 'clean safety flags'],
+    lowcaps: ['low cap with liquidity', 'fresh pair traction', 'early holder growth', 'clean quality flags'],
     bought: ['most bought by tracked wallets', 'clustered buys', 'smart money entry', 'buy pressure'],
     watched: ['watched by users', 'group watchlist activity', 'DM watchlist growth', 'repeat scans']
   };
